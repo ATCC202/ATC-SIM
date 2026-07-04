@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>ATC SIM</title>
+<style>
+:root{--bg:#07101f;--panel:#121b2f;--panel2:#18243b;--text:#e8eefc;--muted:#aebbd5;--line:#415777;--arr:#ffd166;--dep:#4DA3FF;--danger:#3a1725}
+*{box-sizing:border-box}html,body{width:100%;height:100%;overscroll-behavior:none;touch-action:none}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
+header{height:48px;padding:6px 8px;background:#0e1728;border-bottom:1px solid #25334f;display:flex;gap:6px;align-items:center;flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;position:sticky;top:0;z-index:5}
+h1{font-size:16px;margin:0 6px 0 0}button,select,input{border:1px solid #344462;background:#101a2d;color:var(--text);border-radius:8px;padding:5px 7px;font-size:12px}button{cursor:pointer;background:#1c2b47}button:hover{background:#25385d}label{font-size:12px;color:var(--muted);display:flex;gap:4px;align-items:center}.miniBtn{width:28px;height:28px;padding:0;font-size:17px}.speedValue{min-width:42px;text-align:center;color:#fff}.runtimeClock{font-variant-numeric:tabular-nums;border:1px solid #344462;background:#101a2d;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:700;color:#fff;min-width:70px;text-align:center}.depHeadingControl input{width:56px!important}#runwaySelect{min-width:58px;max-width:64px}.control select{min-width:110px;max-width:145px}
+main{height:calc(100vh - 48px);display:grid;grid-template-columns:minmax(0,1fr) 285px;gap:6px;padding:6px}#scopeWrap{position:relative;border:1px solid #25334f;border-radius:14px;overflow:hidden;background:#07101f;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}canvas{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:default}aside{display:flex;flex-direction:column;gap:6px;min-width:0}.card{background:var(--panel);border:1px solid #25334f;border-radius:12px;padding:8px}.card h2{font-size:14px;margin:0 0 7px}.small,.hint{font-size:11px;line-height:1.35;color:var(--muted)}#calls{font-size:12px;line-height:1.25;max-height:145px;overflow:auto;white-space:pre-wrap;color:#d8e2f5}.traffic{font-size:12px;line-height:1.28;overflow-y:auto;overflow-x:hidden;flex:1;min-height:0}
+aside{display:flex;flex-direction:column;gap:6px;min-width:0;height:100%}
+aside .card:last-child{display:flex;flex-direction:column;flex:1;min-height:0}
+aside .card:last-child .traffic{flex:1;min-height:0}.aircraftRow{border-bottom:1px solid #25334f;padding:7px 5px;cursor:pointer;border-radius:8px}.aircraftRow:hover{background:#18243b}.aircraftRow b{font-size:13px}.intentions{margin-top:3px;color:#d8e2f5;white-space:pre-line}.popup{position:absolute;display:none;z-index:10;background:#121b2f;border:1px solid #647899;border-radius:10px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.45);width:156px;max-height:calc(100% - 12px);overflow:auto}.popup b{display:block;margin-bottom:3px;font-size:12px}.popup label{font-size:10px;margin:1px 0}.popup input{width:100%;padding:3px 5px;font-size:11px;margin-top:1px}.popup button{width:100%;margin:1px 0;text-align:center;padding:4px 5px;font-size:11px;border-radius:7px}.popup .popupGrid{display:grid;grid-template-columns:1fr 1fr;gap:2px}.danger{background:var(--danger);border-color:#7d3650}.autoOn{background:#24543a!important;border-color:#52a36f!important;color:#fff!important}
+#selectedPanel input,#selectedPanel select{width:100%;margin:4px 0 8px}.editButtons{display:flex;gap:5px;flex-wrap:wrap}.editButtons button{flex:1;min-width:70px}
+
+/* Fixed sidebar layout: the aircraft list scrolls instead of stretching the radar/page. */
+html, body { height:100%; max-height:100%; overflow:hidden; }
+main { height:calc(100vh - 48px); min-height:0; overflow:hidden; }
+#scopeWrap { min-height:0; height:100%; }
+aside { height:100%; max-height:100%; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+aside .card { flex:0 0 auto; min-height:0; }
+aside .card:last-child { flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+aside .card:last-child h2 { flex:0 0 auto; }
+#trafficList { flex:1 1 auto; min-height:0; max-height:none !important; overflow-y:auto !important; overflow-x:hidden; padding-right:2px; }
+
+
+/* Three-column ATC SIM layout:
+   left = fixed aircraft list with its own scrollbar,
+   centre = radar,
+   right = intentions + selected aircraft. */
+html, body { height:100%; max-height:100%; overflow:hidden; }
+main {
+  height:calc(100vh - 48px) !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  display:grid !important;
+  grid-template-columns:240px minmax(0,1fr) 285px !important;
+  gap:6px !important;
+  padding:6px !important;
+}
+#scopeWrap {
+  min-width:0 !important;
+  min-height:0 !important;
+  height:100% !important;
+}
+.leftPanel,
+.rightPanel {
+  height:100% !important;
+  max-height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  gap:6px !important;
+}
+.leftPanel .aircraftCard {
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+.leftPanel .aircraftCard h2 {
+  flex:0 0 auto !important;
+}
+#trafficList {
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding-right:2px;
+}
+.rightPanel .intentionsCard,
+.rightPanel .selectedCard {
+  flex:0 0 auto !important;
+}
+#calls {
+  max-height:42vh !important;
+  overflow-y:auto !important;
+}
+
+/* Keep the right-side menu inside the screen height.
+   Selected Aircraft stays dynamic with no internal scrollbar; Aircraft Intentions scrolls. */
+.rightPanel {
+  height:100% !important;
+  max-height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+}
+.rightPanel .selectedCard {
+  flex:0 0 auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+  display:block !important;
+}
+#selectedPanel {
+  overflow:visible !important;
+  max-height:none !important;
+  padding-right:0 !important;
+}
+.rightPanel .intentionsCard {
+  flex:1 1 auto !important;
+  min-height:90px !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+.rightPanel .intentionsCard h2 {
+  flex:0 0 auto !important;
+}
+#calls {
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow-y:auto !important;
+}
+.rightPanel .syncCard {
+  flex:0 0 auto !important;
+  margin-top:0 !important;
+}
+
+@media (max-width: 900px) {
+  main {
+    grid-template-columns:190px minmax(0,1fr) 235px !important;
+  }
+}
+
+.syncStatus{font-size:11px;color:var(--muted);border:1px solid #344462;background:#101a2d;border-radius:8px;padding:5px 8px;min-width:90px;text-align:center}
+.syncStatus.live{color:#9ff0b3;border-color:#52a36f}
+.syncStatus.watch{color:#ffd166;border-color:#a98532}
+#syncSessionInput{width:100%;text-transform:uppercase}
+.syncCard{margin-top:auto;display:flex;flex-direction:column;gap:6px}
+.syncCard .syncRow{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.syncCard .syncRow button{width:100%}
+.syncCard .syncStatus{width:100%;display:block}
+body.traineeMode header button, body.traineeMode header select, body.traineeMode header input{opacity:.48;pointer-events:none}
+body.traineeMode #zoomMinus, body.traineeMode #zoomPlus{opacity:1!important;pointer-events:auto!important}
+body.traineeMode #zoomValue{opacity:1!important}
+body.traineeMode #hostSessionBtn, body.traineeMode #joinSessionBtn, body.traineeMode #copyTraineeLinkBtn, body.traineeMode .syncSessionLabel{display:none!important}
+body.traineeMode #selectedPanel button, body.traineeMode #selectedPanel select, body.traineeMode #selectedPanel input{display:none}
+body.traineeMode canvas{cursor:default}
+
+/* Two-row control bar */
+header{height:84px!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:5px!important;overflow:hidden!important;padding:5px 8px!important}
+.headerRow{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;min-height:32px}
+.headerRow h1{flex:0 0 auto}
+main{height:calc(100vh - 84px)!important}
+.headerRow.bottomRow{border-top:1px solid #25334f;padding-top:4px}
+.radialControl input,.heightControl input,.spawnAtControl input{width:58px!important}
+@media (max-width:900px){header{height:88px!important}main{height:calc(100vh - 88px)!important}}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="headerRow topRow">
+    <h1>ATC SIM</h1>
+    <button id="startBtn">Start</button><button id="pauseBtn">Pause</button><button id="newScenarioBtn">Start New</button><button id="stepBackBtn">−10 sec</button><button id="fastForwardBtn">+10 sec</button>
+    <label class="control">Run speed <button class="miniBtn" id="speedMinus">−</button><span class="speedValue" id="speedValue">1.50×</span><button class="miniBtn" id="speedPlus">+</button></label>
+    <span id="runtimeClock" class="runtimeClock">00:00:00</span>
+    <label>Runway <select id="runwaySelect"><option value="90">09</option><option value="270">27</option></select></label>
+    <label class="control">Zoom <button class="miniBtn" id="zoomMinus">−</button><span class="speedValue" id="zoomValue">1.25×</span><button class="miniBtn" id="zoomPlus">+</button></label>
+  </div>
+  <div class="headerRow bottomRow">
+    <label class="control">Aircraft <select id="aircraftTypeSelect">
+<option value="B350">B350 / HDSN</option><option value="Hawk">Hawk / PHNX</option><option value="F18">F18 / HRTG</option><option value="PC21">PC21 / ALDN</option>
+<option value="BE79">BE79 / CLE</option><option value="C206">C206 / WGP</option><option value="PA31">PA31 / OCF</option><option value="D328">D328 / RSCU328</option><option value="C182">C182 / KOJ/SVA</option><option value="BE20">BE20 / MWU</option><option value="C208">C208 / HAM</option><option value="PA34">PA34 / KMN</option>
+</select></label>
+    <label class="control radialControl">Radial <input id="arrivalRadialInput" type="number" min="0" max="359" step="10" value="270"></label>
+    <label class="control heightControl">Height <input id="manualHeightInput" type="number" min="0" max="11000" step="100" value="3500"> FT</label>
+    <button id="depHeadingBtn" type="button">Depart heading</button>
+    <label class="control spawnAtControl">Spawn at <input id="arrivalDistanceInput" type="number" min="1" max="30" step="1" value="10"> NM</label>
+    <button id="arrivalRadialBtn" type="button">New Arrival</button>
+    <button id="spawnDepartureBtn">Random Departure</button><button id="randomArrivalBtn">Random Arrival</button><button id="autoGenerateBtn" type="button">Auto Off</button>
+  </div>
+</header>
+<main>
+<aside id="leftPanel" class="leftPanel">
+  <div class="card aircraftCard"><h2>Aircraft</h2><div class="traffic" id="trafficList"></div></div>
+</aside>
+<section id="scopeWrap"><canvas id="scope"></canvas><div id="aircraftPopup" class="popup"></div></section>
+<aside id="rightPanel" class="rightPanel">
+  <div class="card selectedCard"><h2>Selected aircraft</h2><div id="selectedPanel" class="small">Click an aircraft to select it. Double-click for quick actions. Drag its callsign if labels overlap.</div></div>
+  <div class="card intentionsCard"><h2>Aircraft intentions</h2><div id="calls">Start a scenario, then add traffic.</div></div>
+  <div class="card syncCard"><h2>Shared session</h2><span class="syncStatus" id="syncStatus">Local</span><label class="syncSessionLabel">Session code<input id="syncSessionInput" placeholder="ABC123" maxlength="8"></label><div class="syncRow"><button id="hostSessionBtn" class="syncBtn" type="button">Host</button><button id="joinSessionBtn" class="syncBtn" type="button">Join</button></div><div class="syncRow"><button id="copyTraineeLinkBtn" class="syncBtn" type="button">Copy Share Link</button><button id="leaveSessionBtn" class="syncBtn" type="button">Leave</button></div><div class="hint">Trainee can select aircraft and move labels locally, but cannot control traffic.</div></div>
+</aside>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+const canvas=document.getElementById('scope'),ctx=canvas.getContext('2d'),scopeWrap=document.getElementById('scopeWrap');
+const calls=document.getElementById('calls'),trafficList=document.getElementById('trafficList'),selectedPanel=document.getElementById('selectedPanel'),aircraftPopup=document.getElementById('aircraftPopup'),runtimeClock=document.getElementById('runtimeClock');
+let aircraft=[],running=false,lastT=performance.now(),simTime=0,runSpeed=1.5,zoomLevel=1.25,selectedAircraftId=null,labelDrag=null,suppressClickUntil=0,history=[],autoGenerate=false,autoNext=6,lastListRender=0;
+// Firebase setup: create a Firebase Realtime Database project, then replace these values with your web app config.
+const firebaseConfig={apiKey:"AIzaSyBOlGg3tf_yxmqk4MvoFhClaaSRDlqrX8A",authDomain:"atc-sim-5f63e.firebaseapp.com",databaseURL:"https://atc-sim-5f63e-default-rtdb.firebaseio.com",projectId:"atc-sim-5f63e",storageBucket:"atc-sim-5f63e.firebasestorage.app",messagingSenderId:"42428113610",appId:"1:42428113610:web:4237dacd5682706e914a33"};
+let syncMode='local',syncSession='',firebaseApp=null,firebaseDb=null,syncRef=null,stateUnsub=null,noticeUnsub=null,lastSyncWrite=0,receivingRemote=false,traineeLabelOffsets={},syncClientId='C'+Math.random().toString(36).slice(2,9),lastNoticeAt=0;
+
+const CIRCUIT_HEIGHT_FT=1500,CIRCUIT_OFFSET_NM=1.5,FINAL_LEG_NM=2,UPWIND_LEG_NM=2,RUNWAY_NM=1.875;
+const callSignPools={B350:['HDSN21','HDSN32','HDSN44','HDSN55'],Hawk:['PHNX11','PHNX24','PHNX36','PHNX48'],F18:['HRTG15','HRTG27','HRTG39','HRTG52'],PC21:['ALDN61','ALDN73','ALDN84','ALDN96'],BE79:['CLE'],C206:['WGP'],PA31:['OCF'],D328:['RSCU328'],C182:['KOJ','SVA'],BE20:['MWU'],C208:['HAM'],PA34:['KMN']};
+const militaryTypes=new Set(['B350','Hawk','F18','PC21']);
+const perf={PC21:{s:150,c:2800,d:1700,t:4.5},Hawk:{s:180,c:5000,d:2800,t:5},F18:{s:230,c:7000,d:3300,t:6},B350:{s:140,c:2000,d:1400,t:3},BE20:{s:130,c:2000,d:1400,t:3},BE79:{s:100,c:900,d:800,t:3},PA31:{s:120,c:1300,d:1000,t:3},PA34:{s:110,c:1000,d:900,t:3},C208:{s:95,c:1000,d:800,t:3},C206:{s:90,c:800,d:700,t:3},C182:{s:85,c:800,d:700,t:3},D328:{s:140,c:2200,d:1700,t:2.8}};
+function P(t){return perf[t]||{s:120,c:1000,d:800,t:3}};function deg2rad(d){return d*Math.PI/180}function rad2deg(r){return (r*180/Math.PI+360)%360}function normDeg(d){return (d%360+360)%360}function angleDiff(a,b){let d=Math.abs(normDeg(a)-normDeg(b));return d>180?360-d:d}function signedTurn(a,b){let d=normDeg(b-a);if(d>=180)d-=360;return Math.max(-179,Math.min(179,d))}function unitFromHeading(h){let r=deg2rad(h);return{x:Math.sin(r),y:-Math.cos(r)}}function leftNormal(v){return{x:-v.y,y:v.x}}function rightNormal(v){return{x:v.y,y:-v.x}}function add(p,v,s=1){return{x:p.x+v.x*s,y:p.y+v.y*s}}function sub(a,b){return{x:a.x-b.x,y:a.y-b.y}}function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}function lerp(a,b,t){return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t}}function headingFromTo(a,b){return rad2deg(Math.atan2(b.x-a.x,-(b.y-a.y)))}
+function scale(){return Math.min(canvas.width,canvas.height)/(17.5/zoomLevel)}function nmToPx(n){return n*scale()}function centre(){return{x:canvas.width/2,y:canvas.height/2}}function rwyHdg(){return Number(document.getElementById('runwaySelect').value)}function climbPerSec(ac,f=1){return P(ac.type).c/60*f*1.25}function descentPerSec(ac,f=1){return P(ac.type).d/60*f*1.25}
+function runwayModel(side=1,hdgOverride=null){const c=centre(),hdg=hdgOverride??rwyHdg(),u=unitFromHeading(hdg),n=side===-1?leftNormal(u):rightNormal(u);const thresholdIn=add(c,u,-nmToPx(RUNWAY_NM/2)),thresholdOut=add(c,u,nmToPx(RUNWAY_NM/2));const finalStart=add(thresholdIn,u,-nmToPx(FINAL_LEG_NM)),upwindEnd=add(thresholdOut,u,nmToPx(UPWIND_LEG_NM)),crosswindEnd=add(upwindEnd,n,nmToPx(CIRCUIT_OFFSET_NM)),downwindStart=crosswindEnd,downwindEnd=add(finalStart,n,nmToPx(CIRCUIT_OFFSET_NM)),baseStart=downwindEnd,baseEnd=finalStart;return{c,hdg,u,n,side,thresholdIn,thresholdOut,finalStart,upwindEnd,crosswindEnd,downwindStart,downwindEnd,baseStart,baseEnd}}
+function rescalePointForZoom(pt,oldC,oldS,newC,newS){
+  if(!pt||!Number.isFinite(pt.x)||!Number.isFinite(pt.y)||!oldS||!newS)return pt;
+  return {x:newC.x+(pt.x-oldC.x)/oldS*newS,y:newC.y+(pt.y-oldC.y)/oldS*newS};
+}
+function rescaleAircraftGeometry(oldC,oldS,newC=centre(),newS=scale()){
+  aircraft.forEach(ac=>{
+    ac.pos=rescalePointForZoom(ac.pos,oldC,oldS,newC,newS);
+    if(Array.isArray(ac.route))ac.route=ac.route.map(pt=>rescalePointForZoom(pt,oldC,oldS,newC,newS));
+    if(ac.airbornePoint)ac.airbornePoint=rescalePointForZoom(ac.airbornePoint,oldC,oldS,newC,newS);
+    if(ac.turnPoint)ac.turnPoint=rescalePointForZoom(ac.turnPoint,oldC,oldS,newC,newS);
+  });
+}
+function sideFromPosition(pos){const b=runwayModel(1),rel=sub(pos,b.c),ld=rel.x*leftNormal(b.u).x+rel.y*leftNormal(b.u).y,rd=rel.x*rightNormal(b.u).x+rel.y*rightNormal(b.u).y;return ld>=rd?-1:1}function isNorthCircuitSide(side){return runwayModel(side).n.y<0}function circuitDirectionWord(side){const north=isNorthCircuitSide(side);return rwyHdg()===90?(north?'left':'right'):(north?'right':'left')}function circuitLegIntent(ac,leg){const dir=circuitDirectionWord(ac.side??sideFromPosition(ac.pos));if(['final','upwind','straight-in'].includes(leg))return leg;return `${dir} ${leg.replace('-',' ')}`}
+function northCircuitSide(){return isNorthCircuitSide(-1)?-1:1}
+function goAroundCircuitSide(ac){const n=northCircuitSide();return ac.goAroundOtherCircuit?-n:n}
+function goAroundCircuitDescription(ac){const side=goAroundCircuitSide(ac);return `${circuitDirectionWord(side)} circuit`}
+function otherCircuitButtonLabel(){return rwyHdg()===270?'Left Circuit':'Right Circuit'}
+function selectedAircraftType(){return document.getElementById('aircraftTypeSelect').value}function randomAircraftType(){const k=Object.keys(callSignPools);return k[Math.floor(Math.random()*k.length)]}function randomUnusedCall(type=selectedAircraftType()){const pool=callSignPools[type]||callSignPools.PC21;if(militaryTypes.has(type)){const prefix=pool[Math.floor(Math.random()*pool.length)].replace(/\d+$/,'');for(let i=0;i<90;i++){const call=prefix+String(10+Math.floor(Math.random()*90)).padStart(2,'0');if(!aircraft.some(a=>a.call===call))return call}return null}const opts=pool.filter(c=>!aircraft.some(a=>a.call===c));return opts.length?opts[Math.floor(Math.random()*opts.length)]:null}
+function levelText(ft){return String(Math.max(0,Math.round((ft||0)/100))).padStart(3,'0')}function targetAltFor(ac){if(Number.isFinite(ac.targetAlt))return ac.targetAlt;if(['join-upwind','join-crosswind','join-downwind','join-mid-downwind'].includes(ac.mode))return CIRCUIT_HEIGHT_FT;if(['join-base','join-final','straight-in','land','rollout'].includes(ac.mode))return 0;if(ac.mode?.includes('departure'))return 3500;return ac.alt}function altInstruction(ac){const t=targetAltFor(ac);if(t>ac.alt+60)return`Climb to ${levelText(t)}`;if(t<ac.alt-60)return`Descend to ${levelText(t)}`;return`Maintain ${levelText(t)}`}function heightTrendArrow(ac){
+  // Show climb/descent arrows whenever the aircraft is changing level OR still has
+  // an assigned altitude above/below it. If it is level and at/near the target, show no arrow.
+  if(ac.vTrend==='up') return '↑';
+  if(ac.vTrend==='down') return '↓';
+  const t = targetAltFor(ac);
+  if(Number.isFinite(t)){
+    if(t > ac.alt + 25) return '↑';
+    if(t < ac.alt - 25) return '↓';
+  }
+  return '';
+}function labelForAircraft(ac){return`${levelText(ac.alt)}${heightTrendArrow(ac)} ${String(Math.floor((ac.speed*60)/10)).padStart(3,'0')}`}
+function closestPointOnSegment(p,a,b){
+  const ab=sub(b,a),ap=sub(p,a),len2=ab.x*ab.x+ab.y*ab.y;
+  if(!len2)return {point:{...a},t:0};
+  const t=Math.max(0,Math.min(1,(ap.x*ab.x+ap.y*ab.y)/len2));
+  return {point:{x:a.x+ab.x*t,y:a.y+ab.y*t},t};
+}
+function pointSegmentDistance(p,a,b){return dist(p,closestPointOnSegment(p,a,b).point)}
+function routeLengthFromJoinPoint(joinPoint,remainingPoints){
+  let total=0,prev=joinPoint;
+  remainingPoints.forEach(pt=>{total+=dist(prev,pt);prev=pt});
+  return total;
+}
+function sideForCircuitDirection(direction){
+  // direction is the spoken circuit direction: 'left' or 'right'.
+  // side -1/1 changes depending on whether RWY09 or RWY27 is selected.
+  return circuitDirectionWord(-1)===direction?-1:1;
+}
+function radialInSector(radial,start,end){
+  radial=normDeg(radial); start=normDeg(start); end=normDeg(end);
+  if(start===end)return true;
+  if(start<end)return radial>=start&&radial<end;
+  return radial>=start||radial<end;
+}
+function arrivalJoinDecision(ac){
+  // Fixed sector lookup from the user's runway diagrams.
+  // Red lines are sector boundaries. The number in each sector sets the join:
+  // 1 straight-in, 2 left base, 3 left mid-downwind, 4 left downwind,
+  // 5 right downwind, 6 right mid-downwind, 7 right base.
+  // Normal arrivals never join upwind.
+  const radial=Number.isFinite(ac.arrivalRadial)?normDeg(ac.arrivalRadial):headingFromTo(centre(),ac.pos);
+  const rwy=rwyHdg();
+  const sectors=(rwy===270)?[
+    {from:360,to:60,join:7},
+    {from:60,to:110,join:1},
+    {from:110,to:180,join:2},
+    {from:180,to:225,join:3},
+    {from:225,to:270,join:4},
+    {from:270,to:315,join:5},
+    {from:315,to:360,join:6}
+  ]:[
+    {from:300,to:360,join:2},
+    {from:360,to:45,join:3},
+    {from:45,to:90,join:4},
+    {from:90,to:135,join:5},
+    {from:135,to:180,join:6},
+    {from:180,to:240,join:7},
+    {from:240,to:300,join:1}
+  ];
+  const selected=sectors.find(s=>radialInSector(radial,s.from,s.to))||sectors[0];
+  const join=selected.join;
+  if(join===1)return{mode:'straight-in',label:'straight-in',side:ac.side??sideFromPosition(ac.pos),join};
+  if(join===2)return{mode:'join-base',label:'base',side:sideForCircuitDirection('left'),join};
+  if(join===3)return{mode:'join-mid-downwind',label:'mid-downwind',side:sideForCircuitDirection('left'),join};
+  if(join===4)return{mode:'join-downwind',label:'downwind',side:sideForCircuitDirection('left'),join};
+  if(join===5)return{mode:'join-downwind',label:'downwind',side:sideForCircuitDirection('right'),join};
+  if(join===6)return{mode:'join-mid-downwind',label:'mid-downwind',side:sideForCircuitDirection('right'),join};
+  if(join===7)return{mode:'join-base',label:'base',side:sideForCircuitDirection('right'),join};
+  return{mode:'straight-in',label:'straight-in',side:ac.side??sideFromPosition(ac.pos),join:1};
+}
+function predictedInboundIntent(ac){const d=arrivalJoinDecision(ac);return d.mode==='straight-in'?'will continue straight-in':`will join ${circuitLegIntent(ac,d.label)}`;}
+function intentionLines(ac){const hVal=Number.isFinite(ac.assignedHeading)?ac.assignedHeading:(Number.isFinite(ac.currentHdg)?ac.currentHdg:(Number.isFinite(ac.departRadial)?ac.departRadial:rwyHdg()));const h=String(Math.round(hVal)).padStart(3,'0');const depFinal=Number.isFinite(ac.departRadial)?String(Math.round(ac.departRadial)).padStart(3,'0'):h;if(ac.mode?.includes('departure')){if(ac.mode==='departure-roll')return[`Departing runway ${String(rwyHdg()).padStart(3,'0')}`,`After departure: final heading ${depFinal}°`,altInstruction(ac)];if(ac.mode==='departure-runway-heading')return[`Runway heading ${String(rwyHdg()).padStart(3,'0')}°`,`Then final heading ${depFinal}°`,altInstruction(ac)];if(ac.mode==='departure-radial')return[`Outbound final heading ${depFinal}°`,altInstruction(ac)];return[`Departure`,`Final heading ${depFinal}°`,`Current heading ${h}°`,altInstruction(ac)];}if(ac.mode==='arrival-inbound'){return[predictedInboundIntent(ac),altInstruction(ac)];}if(ac.mode==='straight-in')return[ac.intention==='go around'?'Go Around':'Straight-in','Runway profile',ac.intention==='go around'?'Climb at threshold':altInstruction(ac)];if(ac.mode==='missed')return['Go Around','Climb runway heading',`Join ${goAroundCircuitDescription(ac)}`,'Climb to 015'];if(ac.mode==='rollout'||ac.mode==='landed')return['Landed','Rollout / terminate'];if(ac.mode==='manual-track')return[`Flying heading ${h}°`,altInstruction(ac)];if(ac.mode?.startsWith('join-')){let leg=ac.mode.replace('join-','');return[`Joining ${circuitLegIntent(ac,leg)}`,altInstruction(ac),ac.intention==='go around'?'Then Go Around':'Then land'];}if(ac.mode==='land')return['Final','Land',altInstruction(ac)];return[ac.status||'Operating',altInstruction(ac)]}
+function log(text){const cur=calls.textContent.startsWith('Start')?'':calls.textContent;calls.textContent=`[${String(Math.floor(simTime)).padStart(3,'0')}] ${text}\n`+cur}
+function resize(){const hasSize=canvas.width&&canvas.height,oldC=hasSize?centre():null,oldS=hasSize?scale():null;canvas.width=scopeWrap.clientWidth;canvas.height=scopeWrap.clientHeight;if(hasSize)rescaleAircraftGeometry(oldC,oldS,centre(),scale())}window.addEventListener('resize',resize);resize();
+function routeForMode(ac,mode){const m=runwayModel(ac.side??sideFromPosition(ac.pos));if(mode==='straight-in'||mode==='land'||mode==='join-final')return[m.finalStart,m.thresholdIn,m.c];if(mode==='join-base')return[m.baseStart,m.baseEnd,m.thresholdIn,m.c];if(mode==='join-downwind')return[m.downwindStart,m.downwindEnd,m.baseEnd,m.thresholdIn,m.c];if(mode==='join-mid-downwind')return[lerp(m.downwindStart,m.downwindEnd,.5),m.downwindEnd,m.baseEnd,m.thresholdIn,m.c];if(mode==='join-crosswind')return[m.crosswindEnd,m.downwindEnd,m.baseEnd,m.thresholdIn,m.c];if(mode==='join-upwind')return[m.upwindEnd,m.crosswindEnd,m.downwindEnd,m.baseEnd,m.thresholdIn,m.c];return[]}
+function assignCircuitJoin(ac,mode,label){ac.side=ac.forceCircuitSide??sideFromPosition(ac.pos);if(ac.forceCircuitSide!=null)ac.forceCircuitSide=null;ac.mode=mode;ac.route=routeForMode(ac,mode);ac.routeIndex=0;ac.interceptingLeg=true;ac.assignedHeading=null;ac.joinStartAlt=ac.alt;ac.joinStartDist=ac.route[0]?dist(ac.pos,ac.route[0]):1;ac.targetAlt=(mode==='straight-in'||mode==='join-final')?0:CIRCUIT_HEIGHT_FT;ac.status=`Arcing to ${circuitLegIntent(ac,label||mode.replace('join-',''))}`;log(`${ac.call}: ${ac.status}.`)}
+function spawnArrival(typeOverride){const m=runwayModel(),rad=Math.random()*360,pos=add(m.c,unitFromHeading(rad),nmToPx(8+Math.random()*3)),type=typeOverride||selectedAircraftType(),call=randomUnusedCall(type);if(!call){log(`${type}: callsign already active`);return}const inboundHdg=headingFromTo(pos,m.c),side=sideFromPosition(pos);const randomAlt=(25+Math.floor(Math.random()*86))*100;const ac={id:crypto.randomUUID(),call,type,pos,alt:randomAlt,speed:P(type).s/60,side,mode:'arrival-inbound',route:[],routeIndex:0,intention:'full stop',currentHdg:inboundHdg,targetAlt:CIRCUIT_HEIGHT_FT,vTrend:'level',labelOffset:null};aircraft.push(ac);log(`${call}: inbound.`)}
+function arrivalRadial(){let r=Number(document.getElementById('arrivalRadialInput').value);return Number.isFinite(r)?normDeg(r):270}
+function arrivalDistanceNm(){let n=Number(document.getElementById('arrivalDistanceInput').value);return Number.isFinite(n)?Math.max(1,Math.min(30,n)):10}
+function manualHeightFt(){let h=Number(document.getElementById('manualHeightInput').value);return Number.isFinite(h)?Math.max(0,Math.min(11000,Math.round(h/100)*100)):3500}
+function randomTrafficHeightFt(){return (25+Math.floor(Math.random()*86))*100}
+function spawnSelectedArrivalOnRadial(){const m=runwayModel(),rad=arrivalRadial(),spawnNm=arrivalDistanceNm(),pos=add(m.c,unitFromHeading(rad),nmToPx(spawnNm)),type=selectedAircraftType(),call=randomUnusedCall(type);if(!call){log(`${type}: callsign already active`);return}const inboundHdg=headingFromTo(pos,m.c),side=sideFromPosition(pos),startAlt=manualHeightFt();const ac={id:crypto.randomUUID(),call,type,pos,alt:startAlt,speed:P(type).s/60,side,mode:'arrival-inbound',route:[],routeIndex:0,intention:'full stop',currentHdg:inboundHdg,targetAlt:CIRCUIT_HEIGHT_FT,vTrend:'level',labelOffset:null,arrivalRadial:rad,spawnNm};aircraft.push(ac);log(`${call}: selected ${type} arrival, radial ${String(Math.round(rad)).padStart(3,'0')}, ${spawnNm} NM, height ${startAlt} FT.`);renderList();publishState(true)}
+function departureHeading(){return arrivalRadial()}function randomDepartureHeading(){return Math.floor(Math.random()*360)}function spawnDeparture(typeOverride,assigned=null,targetAltOverride=null){const m=runwayModel(),type=typeOverride||selectedAircraftType(),call=randomUnusedCall(type);if(!call){log(`${type}: callsign already active`);return}const airborne=add(m.thresholdIn,m.u,nmToPx(.45+Math.random()*1.2)),turnPoint=Math.random()<.45?add(m.thresholdOut,m.u,nmToPx(1.2+Math.random()*2)):add(airborne,m.u,nmToPx(.4+Math.random()*.5));const dep=assigned==null?randomDepartureHeading():normDeg(Number(assigned));const finalAlt=Number.isFinite(targetAltOverride)?targetAltOverride:3500;const ac={id:crypto.randomUUID(),call,type,pos:{...m.thresholdIn},alt:0,speed:P(type).s/60,side:1,mode:'departure-roll',route:[airborne,turnPoint],routeIndex:0,airbornePoint:airborne,turnPoint,departRadial:dep,currentHdg:m.hdg,assignedHeading:m.hdg,targetAlt:finalAlt,intention:'departure',vTrend:'level',labelOffset:null,status:`Rolling runway heading, then outbound ${String(dep).padStart(3,'0')} climbing to ${levelText(finalAlt)}`};aircraft.push(ac);log(`${call}: departure heading ${String(dep).padStart(3,'0')}, climb to ${levelText(finalAlt)}.`)}function spawnRandomArrival(){spawnArrival(randomAircraftType())}function spawnRandomDeparture(){spawnDeparture(randomAircraftType(),null,randomTrafficHeightFt())}function spawnDepartureAssignedHeading(){spawnDeparture(selectedAircraftType(),departureHeading(),manualHeightFt())}
+function chooseJoin(ac){const d=arrivalJoinDecision(ac);if(Number.isFinite(d.side)){ac.side=d.side;ac.forceCircuitSide=d.side}if(d.mode==='straight-in'){ac.mode='straight-in';ac.route=routeForMode(ac,'straight-in');ac.routeIndex=0;ac.targetAlt=0;log(`${ac.call}: straight-in.`);return}assignCircuitJoin(ac,d.mode,d.label)}
+function moveTowards(ac,target,dt,arc=true){const px=nmToPx(ac.speed/60)*runSpeed,d=dist(ac.pos,target);if(d<=Math.max(8,px*dt*1.15)){ac.pos={...target};return true}const desired=headingFromTo(ac.pos,target);if(ac.currentHdg==null)ac.currentHdg=desired;if(arc){const max=(P(ac.type).t||3)*dt*runSpeed,turn=signedTurn(ac.currentHdg,desired);ac.currentHdg=normDeg(ac.currentHdg+Math.max(-max,Math.min(max,turn)))}else ac.currentHdg=desired;ac.pos=add(ac.pos,unitFromHeading(ac.currentHdg),px*dt);return false}function moveOnHeading(ac,dt){const max=(P(ac.type).t||3)*dt*runSpeed,turn=signedTurn(ac.currentHdg??ac.assignedHeading,ac.assignedHeading);ac.currentHdg=normDeg((ac.currentHdg??ac.assignedHeading)+Math.max(-max,Math.min(max,turn)));ac.pos=add(ac.pos,unitFromHeading(ac.currentHdg),nmToPx(ac.speed/60)*runSpeed*dt)}
+function updateAltTo(ac,target,dt){const old=ac.alt,d=target-ac.alt;if(Math.abs(d)<8)ac.alt=target;else if(d>0)ac.alt+=Math.min(d,climbPerSec(ac)*dt);else ac.alt+=Math.max(d,-descentPerSec(ac)*dt);ac.vTrend=ac.alt>old+1?'up':(ac.alt<old-1?'down':'level')}
+function routeDistanceToPoint(ac,point){let total=0,prev=ac.pos;for(let i=ac.routeIndex;i<ac.route.length;i++){total+=dist(prev,ac.route[i]);if(dist(ac.route[i],point)<6)break;prev=ac.route[i]}return total}
+function beginMissed(ac){ac.side=goAroundCircuitSide(ac);ac.forceCircuitSide=ac.side;const m=runwayModel(ac.side);ac.alt=Math.max(ac.alt,200);ac.mode='missed';ac.route=[m.upwindEnd];ac.routeIndex=0;ac.targetAlt=CIRCUIT_HEIGHT_FT;ac.status=`Go Around — ${goAroundCircuitDescription(ac)}`;log(`${ac.call}: Go Around, ${goAroundCircuitDescription(ac)}.`)}function beginRollout(ac){const m=runwayModel(ac.side??sideFromPosition(ac.pos));ac.alt=Math.max(ac.alt,200);ac.mode='rollout';ac.route=[m.c];ac.routeIndex=0;ac.targetAlt=0;ac.status='Rollout'}
+function updateAircraft(dt){aircraft.forEach(ac=>{const old=ac.alt,m=runwayModel(ac.side??1);if(ac.mode==='landed'){ac.alt=0;ac.remove=true;return}if(ac.mode==='arrival-inbound'){moveTowards(ac,m.c,dt,true);updateAltTo(ac,CIRCUIT_HEIGHT_FT,dt);if(dist(ac.pos,m.c)<=nmToPx(5))chooseJoin(ac)}else if(ac.mode==='departure-roll'){const reached=moveTowards(ac,ac.airbornePoint,dt,false);if(dist(ac.pos,m.thresholdIn)>nmToPx(.2)||reached)updateAltTo(ac,700,dt);else ac.vTrend='level';if(reached){ac.mode='departure-runway-heading';ac.assignedHeading=rwyHdg();log(`${ac.call}: airborne.`)}}else if(ac.mode==='departure-runway-heading'){
+      updateAltTo(ac,Math.min(CIRCUIT_HEIGHT_FT,targetAltFor(ac)),dt);
+      const rm=runwayModel(ac.side??1);
+      const dToTurn=dist(ac.pos,ac.turnPoint);
+      const passedTurn=(sub(ac.pos,ac.turnPoint).x*rm.u.x + sub(ac.pos,ac.turnPoint).y*rm.u.y) > 0;
+      const reached=dToTurn<Math.max(10,nmToPx(ac.speed/60)*runSpeed*dt*1.2) || passedTurn;
+      if(!reached||ac.alt<400){
+        ac.assignedHeading=rwyHdg();
+        moveOnHeading(ac,dt);
+      }else{
+        ac.mode='departure-radial';
+        ac.assignedHeading=ac.departRadial;
+        ac.status=`Turning outbound to departure heading ${String(Math.round(ac.departRadial)).padStart(3,'0')} ${altInstruction(ac)}`;
+        moveOnHeading(ac,dt);
+        log(`${ac.call}: turning outbound to departure heading ${String(Math.round(ac.departRadial)).padStart(3,'0')} ${altInstruction(ac)}.`)
+      }
+    }else if(ac.mode==='departure-radial'){ac.assignedHeading=ac.departRadial;moveOnHeading(ac,dt);updateAltTo(ac,targetAltFor(ac),dt);if(dist(ac.pos,centre())>nmToPx(11.5))ac.remove=true}else if(ac.mode==='manual-track'){moveOnHeading(ac,dt);updateAltTo(ac,targetAltFor(ac),dt)}else if(ac.mode==='missed'){const reached=moveTowards(ac,ac.route[ac.routeIndex],dt,false);updateAltTo(ac,CIRCUIT_HEIGHT_FT,dt);if(reached){assignCircuitJoin(ac,'join-upwind','upwind');ac.intention='full stop'}}else if(ac.mode==='rollout'){moveTowards(ac,ac.route[0],dt,false);updateAltTo(ac,0,dt);ac.speed=Math.max(25,ac.speed-dt*8);if(dist(ac.pos,ac.route[0])<10){ac.mode='landed';ac.remove=true;log(`${ac.call}: rollout complete.`)}}else{const target=ac.route[ac.routeIndex];if(!target){ac.remove=true;return}const rm=runwayModel(ac.side??sideFromPosition(ac.pos)),threshold=rm.thresholdIn,reached=moveTowards(ac,target,dt,!!ac.interceptingLeg),targetIsThreshold=dist(target,threshold)<6;if(ac.interceptingLeg){const rem=Math.max(1,dist(ac.pos,target)),tot=Math.max(rem,ac.joinStartDist||rem),desired=CIRCUIT_HEIGHT_FT+(ac.joinStartAlt-CIRCUIT_HEIGHT_FT)*Math.min(1,rem/tot);updateAltTo(ac,desired,dt)}else{const targetIsBaseEnd=dist(target,rm.baseEnd)<6,onStraight=['straight-in','join-final','land'].includes(ac.mode),descending=targetIsBaseEnd||targetIsThreshold||onStraight;if(descending){const rem=Math.max(0,routeDistanceToPoint(ac,threshold)),path=nmToPx(CIRCUIT_OFFSET_NM+FINAL_LEG_NM),desired=Math.max(200,Math.min(CIRCUIT_HEIGHT_FT,CIRCUIT_HEIGHT_FT*rem/path));updateAltTo(ac,desired,dt)}else updateAltTo(ac,CIRCUIT_HEIGHT_FT,dt)}if(reached){if(ac.interceptingLeg){ac.interceptingLeg=false;ac.joinStartAlt=null;ac.joinStartDist=null;ac.alt=CIRCUIT_HEIGHT_FT;ac.vTrend='level'}if(targetIsThreshold){ac.alt=200;if(ac.intention==='go around')beginMissed(ac);else beginRollout(ac)}else{ac.routeIndex++;if(ac.routeIndex>=ac.route.length)beginRollout(ac)}}}if(ac.vTrend==null){ac.vTrend=ac.alt>old+1?'up':(ac.alt<old-1?'down':'level')}});aircraft=aircraft.filter(a=>!a.remove);if(selectedAircraftId&&!aircraft.some(a=>a.id===selectedAircraftId))selectedAircraftId=null}
+function drawGrid(m){ctx.beginPath();ctx.arc(m.c.x,m.c.y,nmToPx(5),0,Math.PI*2);ctx.strokeStyle='#304363';ctx.lineWidth=1;ctx.setLineDash([6,6]);ctx.stroke();ctx.setLineDash([])}function drawRunway(m){const p1=m.thresholdIn,p2=m.thresholdOut,perp=rightNormal(m.u);ctx.lineCap='butt';ctx.strokeStyle='#111821';ctx.lineWidth=26;ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();ctx.strokeStyle='#d8dee9';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(p1.x+perp.x*13,p1.y+perp.y*13);ctx.lineTo(p2.x+perp.x*13,p2.y+perp.y*13);ctx.moveTo(p1.x-perp.x*13,p1.y-perp.y*13);ctx.lineTo(p2.x-perp.x*13,p2.y-perp.y*13);ctx.stroke();[{p:p1,dir:1},{p:p2,dir:-1}].forEach(({p,dir})=>{ctx.strokeStyle='#d8dee9';ctx.lineWidth=3;for(let i=-2;i<=2;i++){const o=i*4.2;ctx.beginPath();ctx.moveTo(p.x+perp.x*o,p.y+perp.y*o);ctx.lineTo(p.x+perp.x*o+m.u.x*dir*9,p.y+perp.y*o+m.u.y*dir*9);ctx.stroke()}});ctx.strokeStyle='#eef3fb';ctx.lineWidth=2;ctx.setLineDash([12,10]);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();ctx.setLineDash([])}function drawCircuit(m){ctx.strokeStyle='rgba(145,165,195,0.22)';ctx.lineWidth=1;ctx.setLineDash([2,8]);ctx.beginPath();ctx.moveTo(m.thresholdOut.x,m.thresholdOut.y);ctx.lineTo(m.upwindEnd.x,m.upwindEnd.y);ctx.lineTo(m.crosswindEnd.x,m.crosswindEnd.y);ctx.lineTo(m.downwindEnd.x,m.downwindEnd.y);ctx.lineTo(m.baseEnd.x,m.baseEnd.y);ctx.lineTo(m.thresholdIn.x,m.thresholdIn.y);ctx.stroke();ctx.setLineDash([])}
+function drawIcon(ac,size){const hdg=ac.currentHdg??ac.assignedHeading??rwyHdg(),nose=unitFromHeading(hdg),left=leftNormal(nose),col=ac.mode.includes('departure')?'#4DA3FF':'#ffd166',p=(f,l)=>add(add(ac.pos,nose,size*f),left,size*l);ctx.fillStyle=col;ctx.strokeStyle=col;ctx.lineWidth=1.2;ctx.lineJoin='round';ctx.lineCap='round';const fast=['F18','Hawk','PC21'].includes(ac.type),twin=['B350','BE20','PA31','PA34','D328'].includes(ac.type);let pts=fast?[[1.6,0],[.15,.22],[-.35,1.05],[-.6,.25],[-1.25,.55],[-.95,.12],[-1.4,0],[-.95,-.12],[-1.25,-.55],[-.6,-.25],[-.35,-1.05],[.15,-.22]]:twin?[[1.35,0],[.42,.24],[-.05,1.22],[-.3,.33],[-1.18,.52],[-.95,.16],[-1.34,0],[-.95,-.16],[-1.18,-.52],[-.3,-.33],[-.05,-1.22],[.42,-.24]]:[[1.18,0],[.28,.2],[-.06,1.0],[-.25,.25],[-1.04,.38],[-.84,.12],[-1.2,0],[-.84,-.12],[-1.04,-.38],[-.25,-.25],[-.06,-1.0],[.28,-.2]];ctx.beginPath();pts.forEach(([f,l],i)=>{let q=p(f,l);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.closePath();ctx.fill();ctx.stroke();if(!fast){const a=p(1.32,.28),b=p(1.32,-.28);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}}
+function labelPosition(ac,size=11){const def={x:size*2.2+11,y:-size*1.25-11},o=ac.labelOffset||def;return{x:ac.pos.x+o.x,y:ac.pos.y+o.y,offset:o}}function labelHitBox(ac){const lp=labelPosition(ac);const w=Math.max(58,ac.call.length*8+42),h=32,alignLeft=lp.x>=ac.pos.x;return{x:alignLeft?lp.x:lp.x-w,y:lp.y-14,w,h}}function pointInBox(p,b){return p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h}function leaderPoint(ac){const h=ac.currentHdg??ac.assignedHeading??rwyHdg();return add(ac.pos,unitFromHeading(h),10*96/25.4)}
+function drawAircraft(){aircraft.forEach(ac=>{const selected=ac.id===selectedAircraftId,size=11;drawIcon(ac,size);if(selected){ctx.strokeStyle='#ffd166';ctx.lineWidth=1.2;ctx.setLineDash([2,2]);ctx.beginPath();ctx.arc(ac.pos.x,ac.pos.y,size*1.7,0,Math.PI*2);ctx.stroke();ctx.setLineDash([])}const lp=labelPosition(ac,size),alignLeft=lp.x>=ac.pos.x;ctx.textAlign=alignLeft?'left':'right';if(ac.labelOffset){ctx.strokeStyle='rgba(216,222,233,.42)';ctx.lineWidth=1;ctx.setLineDash([1.5,4]);ctx.beginPath();ctx.moveTo(ac.pos.x,ac.pos.y);ctx.lineTo(alignLeft?lp.x-4:lp.x+4,lp.y-5);ctx.stroke();ctx.setLineDash([])}ctx.fillStyle='#e8eefc';ctx.font=selected?'bold 13px system-ui':'12px system-ui';ctx.fillText(ac.call,lp.x,lp.y);ctx.fillStyle='#aebbd5';ctx.font='11px system-ui';ctx.fillText(labelForAircraft(ac),lp.x,lp.y+13);ctx.textAlign='left';const lead=leaderPoint(ac);ctx.strokeStyle=selected?'#d8dee9':(ac.mode.includes('departure')?'rgba(77,163,255,.75)':'#415777');ctx.lineWidth=selected?2:1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(ac.pos.x,ac.pos.y);ctx.lineTo(lead.x,lead.y);ctx.stroke();ctx.setLineDash([])})}
+function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);const m=runwayModel();drawGrid(m);drawCircuit(runwayModel(-1));drawCircuit(runwayModel(1));drawRunway(runwayModel(1,90));drawAircraft()}
+function renderSelectedPanel(){const ac=aircraft.find(a=>a.id===selectedAircraftId);if(!ac){selectedPanel.innerHTML='Click an aircraft or aircraft list item to select it. Double-click aircraft for quick actions. Drag callsign if labels overlap.';return}if(syncMode==='trainee'){selectedPanel.innerHTML=`<b>${ac.call}</b><br>${ac.type} · ${labelForAircraft(ac)}<br><div class="intentions">${intentionLines(ac).join('\n')}</div><hr style="border:0;border-top:1px solid #25334f;margin:8px 0"><div class="hint">Watch-only: you can select aircraft and move labels on your screen only.</div>`;return}selectedPanel.innerHTML=`<b>${ac.call}</b><br>${ac.type} · ${labelForAircraft(ac)}<br><div class="intentions">${intentionLines(ac).join('\n')}</div><hr style="border:0;border-top:1px solid #25334f;margin:8px 0"><label>Fly heading<input id="editTrack" type="number" min="0" max="359" value="${String(Math.round(ac.assignedHeading??ac.currentHdg??rwyHdg())).padStart(3,'0')}"></label><button id="flyHeadingBtn" style="width:100%;margin-bottom:8px">Apply heading</button><label>Climb / descend to height<input id="editAlt" type="number" min="0" max="50000" step="100" value="${Math.round(targetAltFor(ac)/100)*100}"></label><button id="heightBtn" style="width:100%;margin-bottom:8px">Apply height</button>${ac.mode?.includes('departure')?'':`<label>Join circuit leg<select id="joinLegSelect"><option value="straight-in">Straight-in</option><option value="join-upwind">Upwind</option><option value="join-crosswind">Crosswind</option><option value="join-downwind">Downwind</option><option value="join-mid-downwind">Mid downwind</option><option value="join-base">Base</option><option value="join-final">Final</option></select></label><button id="joinLegBtn" style="width:100%;margin-bottom:8px">Send to selected leg</button><div class="editButtons" style="margin-bottom:8px"><button id="landBtn">Land / full stop</button><button id="goAroundBtn">Go Around</button><button id="otherCircuitBtn">${otherCircuitButtonLabel()}</button></div>`}<button class="danger" id="deleteSelectedBtn" style="width:100%">Delete selected aircraft</button>`;document.getElementById('flyHeadingBtn').onclick=()=>{ac.mode='manual-track';ac.assignedHeading=normDeg(Number(document.getElementById('editTrack').value)||0);ac.currentHdg=ac.currentHdg??ac.assignedHeading;ac.targetAlt=targetAltFor(ac);ac.status=`Flying heading ${String(Math.round(ac.assignedHeading)).padStart(3,'0')} ${altInstruction(ac)}`;renderList(true);publishState(true)};document.getElementById('heightBtn').onclick=()=>{ac.targetAlt=Number(document.getElementById('editAlt').value)||0;if(ac.mode==='manual-track')ac.status=`Flying heading ${String(Math.round(ac.assignedHeading??ac.currentHdg??rwyHdg())).padStart(3,'0')} ${altInstruction(ac)}`;else ac.status=`${altInstruction(ac)}`;renderList(true);publishState(true)};if(document.getElementById('joinLegBtn'))document.getElementById('joinLegBtn').onclick=()=>{assignCircuitJoin(ac,document.getElementById('joinLegSelect').value,document.getElementById('joinLegSelect').selectedOptions[0].textContent.toLowerCase());renderSelectedPanel()};if(document.getElementById('landBtn'))document.getElementById('landBtn').onclick=()=>{ac.intention='full stop';ac.targetAlt=0;if(!ac.mode.startsWith('join-')){ac.mode='land';ac.route=routeForMode(ac,'land');ac.routeIndex=0}renderSelectedPanel()};if(document.getElementById('goAroundBtn'))document.getElementById('goAroundBtn').onclick=()=>{ac.intention='go around';if(!ac.mode.startsWith('join-')){ac.mode='straight-in';const rm=runwayModel(ac.side??sideFromPosition(ac.pos));ac.route=[rm.finalStart,rm.thresholdIn,rm.upwindEnd];ac.routeIndex=0}renderSelectedPanel()};if(document.getElementById('otherCircuitBtn'))document.getElementById('otherCircuitBtn').onclick=()=>{ac.goAroundOtherCircuit=!ac.goAroundOtherCircuit;if(ac.mode==='missed'){ac.side=goAroundCircuitSide(ac);ac.forceCircuitSide=ac.side;ac.route=[runwayModel(ac.side).upwindEnd];ac.routeIndex=0}ac.status=ac.goAroundOtherCircuit?'Go Around set for other circuit':'Go Around set for standard northern circuit';renderSelectedPanel();renderList(false)};document.getElementById('deleteSelectedBtn').onclick=()=>{aircraft=aircraft.filter(a=>a.id!==ac.id);selectedAircraftId=null;renderList();renderSelectedPanel()}}
+function renderList(updateSelected=true){trafficList.innerHTML=aircraft.map(ac=>`<div class="aircraftRow" data-id="${ac.id}" ${ac.id===selectedAircraftId?'style="outline:1px solid #647899;border-radius:8px;padding:7px"':''}><b>${ac.call}</b><br>${ac.type} · ${labelForAircraft(ac)}<br><div class="intentions">${intentionLines(ac).join('\n')}</div></div>`).join('')||'<div class="small">No active aircraft.</div>';if(updateSelected)renderSelectedPanel()}trafficList.addEventListener('pointerdown',e=>{const row=e.target.closest('.aircraftRow');if(row){e.preventDefault();selectedAircraftId=row.dataset.id;hidePopup();renderList()}});
+function hidePopup(){aircraftPopup.style.display='none'}function showPopup(ac,x,y){selectedAircraftId=ac.id;renderSelectedPanel();renderList(false);const track=Math.round(ac.assignedHeading??ac.currentHdg??rwyHdg()),alt=Math.round(targetAltFor(ac)/100)*100,arr=ac.mode?.includes('departure')?'':`<button data-act="land">Land</button><button data-act="goaround">Go Around</button><button data-act="dw">DW</button><button data-act="downwind">Mid DW</button><button data-act="base">Base</button><button data-act="othercct">${otherCircuitButtonLabel()}</button>`;aircraftPopup.innerHTML=`<b>${ac.call} <span class="hint">${ac.type}</span></b><div class="popupGrid"><label>Hdg<input id="popupHeading" type="number" min="0" max="359" value="${String(track).padStart(3,'0')}"></label><label>Alt<input id="popupAlt" type="number" min="0" max="50000" step="100" value="${alt}"></label></div><div class="popupGrid"><button data-act="heading">Fly Hdg</button><button data-act="height">Alt</button></div><div class="popupGrid">${arr}</div><button data-act="delete" class="danger">Delete</button>`;const wrap=scopeWrap.getBoundingClientRect();aircraftPopup.style.display='block';const w=aircraftPopup.offsetWidth||156,h=aircraftPopup.offsetHeight||170;aircraftPopup.style.left=Math.min(Math.max(6,x-wrap.left+8),Math.max(6,wrap.width-w-6))+'px';aircraftPopup.style.top=Math.min(Math.max(6,y-wrap.top+8),Math.max(6,wrap.height-h-6))+'px'}aircraftPopup.addEventListener('click',e=>{if(syncMode==='trainee'){hidePopup();return}const b=e.target.closest('button');if(!b)return;const ac=aircraft.find(a=>a.id===selectedAircraftId);if(!ac)return;const act=b.dataset.act;if(act==='delete'){aircraft=aircraft.filter(a=>a.id!==ac.id);selectedAircraftId=null;hidePopup();renderList();return}if(act==='heading'){ac.mode='manual-track';ac.assignedHeading=normDeg(Number(document.getElementById('popupHeading').value)||0);ac.targetAlt=targetAltFor(ac);ac.status=`Flying heading ${String(Math.round(ac.assignedHeading)).padStart(3,'0')} ${altInstruction(ac)}`}if(act==='height'){ac.targetAlt=Number(document.getElementById('popupAlt').value)||0;ac.status=`${altInstruction(ac)}`};if(act==='land'){ac.intention='full stop';ac.targetAlt=0;if(!ac.mode.startsWith('join-')){ac.mode='land';ac.route=routeForMode(ac,'land');ac.routeIndex=0}}if(act==='goaround'){ac.intention='go around';if(!ac.mode.startsWith('join-')){const rm=runwayModel(ac.side??sideFromPosition(ac.pos));ac.mode='straight-in';ac.route=[rm.finalStart,rm.thresholdIn,rm.upwindEnd];ac.routeIndex=0}}if(act==='dw'){ac.intention='full stop';assignCircuitJoin(ac,'join-downwind','downwind')}if(act==='downwind'){ac.intention='full stop';assignCircuitJoin(ac,'join-mid-downwind','mid-downwind')}if(act==='base'){ac.intention='full stop';assignCircuitJoin(ac,'join-base','base')}if(act==='othercct'){ac.goAroundOtherCircuit=!ac.goAroundOtherCircuit;if(ac.mode==='missed'){ac.side=goAroundCircuitSide(ac);ac.forceCircuitSide=ac.side;ac.route=[runwayModel(ac.side).upwindEnd];ac.routeIndex=0}ac.status=ac.goAroundOtherCircuit?'Go Around set for other circuit':'Go Around set for standard northern circuit'}hidePopup();renderList();renderSelectedPanel();publishState(true)});
+function aircraftAtPoint(p){let near=null,nd=Infinity;aircraft.forEach(ac=>{let d=dist(p,ac.pos);if(d<nd){near=ac;nd=d}});return near&&nd<=22?near:null}
+function canvasPoint(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+canvas.addEventListener('click',e=>{if(performance.now()<suppressClickUntil){e.preventDefault();e.stopPropagation();return}const p=canvasPoint(e);const near=aircraftAtPoint(p);if(near){selectedAircraftId=near.id;hidePopup();renderList()}else{selectedAircraftId=null;hidePopup();renderList()}e.preventDefault()});
+canvas.addEventListener('dblclick',e=>{e.preventDefault();e.stopPropagation();const p=canvasPoint(e);const near=aircraftAtPoint(p);if(near){selectedAircraftId=near.id;if(syncMode==='trainee'){hidePopup();renderList()}else showPopup(near,e.clientX,e.clientY)}});
+canvas.addEventListener('pointerdown',e=>{const p=canvasPoint(e);for(let i=aircraft.length-1;i>=0;i--){const ac=aircraft[i],box=labelHitBox(ac);if(pointInBox(p,box)){selectedAircraftId=ac.id;const lp=labelPosition(ac);labelDrag={id:ac.id,dx:p.x-lp.x,dy:p.y-lp.y,pointerId:e.pointerId,moved:false};hidePopup();renderSelectedPanel();canvas.style.cursor='grabbing';try{canvas.setPointerCapture(e.pointerId)}catch(_){}e.preventDefault();e.stopPropagation();return}}},{passive:false});
+function handleLabelMove(e){if(!labelDrag||labelDrag.pointerId!==e.pointerId)return;const ac=aircraft.find(a=>a.id===labelDrag.id);if(!ac){labelDrag=null;canvas.style.cursor='default';return}const p=canvasPoint(e);ac.labelOffset={x:p.x-labelDrag.dx-ac.pos.x,y:p.y-labelDrag.dy-ac.pos.y};if(syncMode==='trainee')traineeLabelOffsets[ac.id]=ac.labelOffset;labelDrag.moved=true;suppressClickUntil=performance.now()+350;e.preventDefault();e.stopPropagation()}
+canvas.addEventListener('pointermove',handleLabelMove,{passive:false});window.addEventListener('pointermove',handleLabelMove,{passive:false});
+function endLabelDrag(e){if(labelDrag&&(!e||labelDrag.pointerId===e.pointerId)){try{canvas.releasePointerCapture(labelDrag.pointerId)}catch(_){}if(labelDrag.moved)suppressClickUntil=performance.now()+500;labelDrag=null;canvas.style.cursor='default';if(e){e.preventDefault();e.stopPropagation()}}}
+canvas.addEventListener('pointerup',endLabelDrag,{passive:false});canvas.addEventListener('pointercancel',endLabelDrag,{passive:false});window.addEventListener('pointerup',endLabelDrag,{passive:false});window.addEventListener('pointercancel',endLabelDrag,{passive:false});
+canvas.addEventListener('wheel',e=>{if(labelDrag){e.preventDefault();e.stopPropagation()}},{passive:false});
+canvas.addEventListener('dragstart',e=>{e.preventDefault();return false});canvas.addEventListener('selectstart',e=>{e.preventDefault();return false});
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});document.addEventListener('gesturechange',e=>e.preventDefault(),{passive:false});document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});document.addEventListener('touchmove',e=>{if(e.target===canvas||scopeWrap.contains(e.target))e.preventDefault()},{passive:false});
+
+function updateAutoButton(){
+  const btn=document.getElementById('autoGenerateBtn');
+  if(!btn)return;
+  btn.textContent=autoGenerate?'Auto Gen On':'Auto Gen Off';
+  btn.classList.toggle('autoOn',autoGenerate);
+}
+function toggleAutoGenerate(){
+  autoGenerate=!autoGenerate;
+  autoNext=2;
+  updateAutoButton();
+  log(autoGenerate?'Auto generation on.':'Auto generation off.');
+}
+function runAutoGenerate(dt){
+  if(!autoGenerate||!running)return;
+  autoNext-=dt;
+  if(autoNext<=0){
+    Math.random()<0.55?spawnRandomArrival():spawnRandomDeparture();
+    autoNext=7+Math.random()*8;
+  }
+}
+
+function firebaseReady(){return typeof firebase!=='undefined'&&firebaseConfig&&firebaseConfig.apiKey&&!firebaseConfig.apiKey.startsWith('PASTE_')&&firebaseConfig.databaseURL&&!firebaseConfig.databaseURL.includes('PASTE_')}
+function updateTransportButtons(){const btn=document.getElementById('pauseBtn');if(btn)btn.textContent=running?'Pause':'Play'}
+function updateSyncStatus(text,cls=''){const el=document.getElementById('syncStatus');if(!el)return;el.textContent=text;el.className='syncStatus '+cls;document.body.classList.toggle('traineeMode',syncMode==='trainee');document.getElementById('startBtn').textContent='Start';updateTransportButtons()}
+function ensureFirebase(){if(!firebaseReady()){alert('Firebase is not configured yet. Open this HTML in a text editor and replace the firebaseConfig placeholder values first.');return false}if(!firebaseApp){firebaseApp=firebase.initializeApp(firebaseConfig);firebaseDb=firebase.database()}return true}
+function makeSessionId(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function cleanSessionId(v){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8)}
+function pointToNet(pt){
+  // Store points in runway/world units instead of screen pixels so each user can zoom independently.
+  if(!pt||!Number.isFinite(pt.x)||!Number.isFinite(pt.y)||!canvas.width||!canvas.height)return pt;
+  const c=centre(),s=scale()||1;
+  return{x:(pt.x-c.x)/s,y:(pt.y-c.y)/s};
+}
+function pointFromNet(pt){
+  if(!pt||!Number.isFinite(pt.x)||!Number.isFinite(pt.y)||!canvas.width||!canvas.height)return pt;
+  const c=centre(),s=scale()||1;
+  return{x:c.x+pt.x*s,y:c.y+pt.y*s};
+}
+function aircraftToNet(ac){const copy=JSON.parse(JSON.stringify(ac));copy.pos=pointToNet(copy.pos);if(Array.isArray(copy.route))copy.route=copy.route.map(pointToNet);if(copy.airbornePoint)copy.airbornePoint=pointToNet(copy.airbornePoint);if(copy.turnPoint)copy.turnPoint=pointToNet(copy.turnPoint);return copy}
+function aircraftFromNet(ac){const copy=JSON.parse(JSON.stringify(ac));copy.pos=pointFromNet(copy.pos);if(Array.isArray(copy.route))copy.route=copy.route.map(pointFromNet);if(copy.airbornePoint)copy.airbornePoint=pointFromNet(copy.airbornePoint);if(copy.turnPoint)copy.turnPoint=pointFromNet(copy.turnPoint);return copy}
+function currentNetState(){return{aircraft:aircraft.map(aircraftToNet),running,simTime,runSpeed,autoGenerate,autoNext,runway:rwyHdg(),departureHeading:departureHeading(),arrivalRadial:arrivalRadial(),arrivalDistance:arrivalDistanceNm(),manualHeight:manualHeightFt(),callsText:calls.textContent,updatedAt:Date.now()}}
+function applyNetState(state){if(!state||receivingRemote)return;receivingRemote=true;const oldSelected=selectedAircraftId;if(syncMode==='trainee'){aircraft.forEach(ac=>{if(ac.labelOffset)traineeLabelOffsets[ac.id]=ac.labelOffset})}aircraft=(state.aircraft||[]).map(aircraftFromNet);if(syncMode==='trainee'){aircraft.forEach(ac=>{if(traineeLabelOffsets[ac.id])ac.labelOffset=traineeLabelOffsets[ac.id]});selectedAircraftId=aircraft.some(a=>a.id===oldSelected)?oldSelected:null}else{selectedAircraftId=aircraft.some(a=>a.id===oldSelected)?oldSelected:null}running=!!state.running;simTime=Number(state.simTime)||0;runSpeed=Number(state.runSpeed)||runSpeed;autoGenerate=!!state.autoGenerate;autoNext=Number(state.autoNext)||autoNext;if(state.runway!=null)document.getElementById('runwaySelect').value=String(state.runway);if(state.departureHeading!=null)document.getElementById('arrivalRadialInput').value=String(state.departureHeading).padStart(3,'0');if(state.arrivalDistance!=null)document.getElementById('arrivalDistanceInput').value=String(state.arrivalDistance);if(state.manualHeight!=null&&document.getElementById('manualHeightInput'))document.getElementById('manualHeightInput').value=String(state.manualHeight);document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×';document.getElementById('zoomValue').textContent=zoomLevel.toFixed(2)+'×';if(typeof state.callsText==='string')calls.textContent=state.callsText;updateRuntimeClock();updateAutoButton();updateTransportButtons();renderList();receivingRemote=false}
+function publishState(force=false){if(syncMode!=='instructor'||!syncRef||receivingRemote)return;const now=performance.now();if(!force&&now-lastSyncWrite<250)return;lastSyncWrite=now;syncRef.child('state').set(currentNetState()).catch(err=>updateSyncStatus('Sync error',''))}
+function publishNotice(text){if(!syncRef||!text)return;syncRef.child('notice').set({text,by:syncClientId,at:Date.now(),mode:syncMode}).catch(()=>{})}
+function listenForNotices(){if(!syncRef)return;noticeUnsub=syncRef.child('notice').on('value',snap=>{const n=snap.val();if(!n||n.by===syncClientId||!n.at||n.at<=lastNoticeAt)return;lastNoticeAt=n.at;updateSyncStatus(n.text,syncMode==='trainee'?'watch':'live');log(n.text);setTimeout(()=>{if(syncMode==='instructor')updateSyncStatus('Host '+syncSession,'live');else if(syncMode==='trainee')updateSyncStatus('Watch '+syncSession,'watch')},3500)},()=>{})}
+function traineeLink(){const id=cleanSessionId(document.getElementById('syncSessionInput').value)||syncSession||makeSessionId();document.getElementById('syncSessionInput').value=id;const url=new URL(location.href);url.searchParams.set('mode','trainee');url.searchParams.set('session',id);return url.toString()}
+async function copyTraineeLink(){const link=traineeLink();try{await navigator.clipboard.writeText(link);alert('Share link copied. Send this to your friend:\n\n'+link)}catch(_){prompt('Copy this share link:',link)}}
+function leaveSession(silent=false){
+  if(syncRef&&!silent&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.');
+  if(stateUnsub&&syncRef){syncRef.child('state').off('value',stateUnsub);stateUnsub=null}
+  if(noticeUnsub&&syncRef){syncRef.child('notice').off('value',noticeUnsub);noticeUnsub=null}
+  syncRef=null;syncMode='local';syncSession='';document.getElementById('syncSessionInput').value='';running=false;
+  try{const url=new URL(location.href);url.searchParams.delete('mode');url.searchParams.delete('session');history.replaceState(null,'',url.toString())}catch(_){}
+  updateSyncStatus('Local','');renderList();updateTransportButtons();
+}
+function startSession(mode,id){if(!ensureFirebase())return;leaveSession(true);syncMode=mode;syncSession=cleanSessionId(id)||makeSessionId();document.getElementById('syncSessionInput').value=syncSession;syncRef=firebaseDb.ref('atcSimSessions/'+syncSession);listenForNotices();if(mode==='instructor'){updateSyncStatus('Host '+syncSession,'live');publishState(true);publishNotice('Host joined the session.');log('Hosting session '+syncSession+'. Use Copy Share Link and send it to your trainee.')}else{updateSyncStatus('Watch '+syncSession,'watch');stateUnsub=syncRef.child('state').on('value',snap=>applyNetState(snap.val()),err=>updateSyncStatus('Sync error',''));publishNotice('Trainee joined the session.')}}
+function blockTraineeControl(e){if(syncMode!=='trainee')return;const allowed=e.target.closest&&e.target.closest('#leaveSessionBtn,#scopeWrap,#trafficList,.aircraftRow,#zoomMinus,#zoomPlus');if(!allowed){e.preventDefault();e.stopPropagation()}}
+document.addEventListener('click',blockTraineeControl,true);document.addEventListener('pointerdown',blockTraineeControl,true);document.addEventListener('keydown',e=>{if(syncMode==='trainee'&&!(e.target&&e.target.id==='syncSessionInput')){e.preventDefault();e.stopPropagation()}},true);
+function updateRuntimeClock(){const total=Math.max(0,Math.floor(simTime));const hh=String(Math.floor(total/3600)).padStart(2,'0'),mm=String(Math.floor((total%3600)/60)).padStart(2,'0'),ss=String(total%60).padStart(2,'0');if(runtimeClock)runtimeClock.textContent=`${hh}:${mm}:${ss}`}function snapshot(){history.push(JSON.stringify({aircraft,simTime}));if(history.length>60)history.shift()}function restore(){const s=history.pop();if(!s)return;const o=JSON.parse(s);aircraft=o.aircraft;simTime=o.simTime;renderList()}function fastForward(sec=10){snapshot();for(let r=sec;r>0;){let dt=Math.min(.2,r);simTime+=dt;updateAircraft(dt);r-=dt}updateRuntimeClock();renderList()}function newScenario(){aircraft=[];history=[];simTime=0;selectedAircraftId=null;autoGenerate=false;autoNext=6;updateAutoButton();runSpeed=1.5;document.getElementById('speedValue').textContent='1.50×';updateRuntimeClock();calls.textContent='New scenario. Add an arrival or departure.';renderList();updateTransportButtons()}
+function tick(t){const dt=Math.min(.2,(t-lastT)/1000);lastT=t;if(running&&syncMode!=='trainee'){simTime+=dt;if(Math.floor(simTime)%10===0&&Math.abs(simTime%10)<dt)snapshot();runAutoGenerate(dt);updateAircraft(dt);updateRuntimeClock();if(!labelDrag&&(t-lastListRender>250)){renderList(false);lastListRender=t}}if(syncMode==='instructor')publishState(false);draw();requestAnimationFrame(tick)}
+document.getElementById('startBtn').onclick=()=>{if(syncMode==='trainee')return;running=true;updateTransportButtons()};document.getElementById('pauseBtn').onclick=()=>{if(syncMode==='trainee')return;running=!running;updateTransportButtons()};document.getElementById('newScenarioBtn').onclick=newScenario;document.getElementById('stepBackBtn').onclick=restore;document.getElementById('fastForwardBtn').onclick=()=>fastForward(10);document.getElementById('randomArrivalBtn').onclick=spawnRandomArrival;document.getElementById('spawnDepartureBtn').onclick=spawnRandomDeparture;document.getElementById('autoGenerateBtn').onclick=toggleAutoGenerate;document.getElementById('depHeadingBtn').onclick=spawnDepartureAssignedHeading;document.getElementById('arrivalRadialBtn').onclick=spawnSelectedArrivalOnRadial;document.getElementById('speedMinus').onclick=()=>{runSpeed=Math.max(.25,+(runSpeed-.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('speedPlus').onclick=()=>{runSpeed=Math.min(6,+(runSpeed+.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('zoomMinus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.max(.85,+(zoomLevel-.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale());document.getElementById('zoomValue').textContent=zoomLevel.toFixed(2)+'×'};document.getElementById('zoomPlus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.min(2.2,+(zoomLevel+.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale());document.getElementById('zoomValue').textContent=zoomLevel.toFixed(2)+'×'};document.getElementById('runwaySelect').onchange=()=>{document.getElementById('arrivalRadialInput').value=String(rwyHdg()).padStart(3,'0');aircraft.forEach(ac=>{if(ac.mode==='arrival-inbound')ac.side=sideFromPosition(ac.pos)});renderList();renderSelectedPanel()};document.getElementById('hostSessionBtn').onclick=()=>startSession('instructor',document.getElementById('syncSessionInput').value);document.getElementById('joinSessionBtn').onclick=()=>startSession('trainee',document.getElementById('syncSessionInput').value);document.getElementById('copyTraineeLinkBtn').onclick=copyTraineeLink;document.getElementById('leaveSessionBtn').onclick=leaveSession;
+updateRuntimeClock();updateAutoButton();updateTransportButtons();renderList();document.addEventListener('dragstart', e=>e.preventDefault());
+window.addEventListener('beforeunload',()=>{if(syncRef&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.')});
+const urlParams=new URLSearchParams(location.search);if(urlParams.get('session')){const mode=urlParams.get('mode')==='trainee'?'trainee':'instructor';document.getElementById('syncSessionInput').value=cleanSessionId(urlParams.get('session'));setTimeout(()=>startSession(mode,document.getElementById('syncSessionInput').value),400)}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
