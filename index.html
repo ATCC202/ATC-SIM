@@ -258,12 +258,34 @@ main{height:calc(100vh - 84px)!important}
   .leftPanel,.rightPanel{height:min(58dvh,320px)!important;bottom:50px!important}
 }
 
+
+/* Phone view chooser: allows a phone to use either the mobile tab layout or the full desktop layout. */
+.viewModeBtn{display:none;background:#27456f;border-color:#6f8fbd;color:#fff;font-weight:700}
+@media (max-width: 760px), (pointer: coarse) and (max-width: 900px){
+  .viewModeBtn{display:inline-flex;align-items:center;justify-content:center}
+  body.traineeMode #viewModeBtn{opacity:1!important;pointer-events:auto!important;display:inline-flex!important}
+  body.forceDesktop{position:static!important;inset:auto!important;width:max(1024px,100vw)!important;min-width:1024px!important;overflow:auto!important;overflow-x:auto!important;overflow-y:auto!important;touch-action:auto!important}
+  body.forceDesktop header{position:sticky!important;top:0!important;height:84px!important;max-height:none!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:5px!important;overflow:hidden!important;padding:5px 8px!important;width:100%!important}
+  body.forceDesktop .headerRow{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;overflow-y:hidden!important;min-height:32px!important;padding-bottom:0!important;gap:6px!important}
+  body.forceDesktop main{height:calc(100vh - 84px)!important;min-height:0!important;overflow:hidden!important;display:grid!important;grid-template-columns:240px minmax(0,1fr) 285px!important;gap:6px!important;padding:6px!important;width:100%!important}
+  body.forceDesktop #scopeWrap{order:initial!important;height:100%!important;min-height:0!important;max-height:none!important;width:100%!important;border-radius:14px!important}
+  body.forceDesktop .leftPanel,body.forceDesktop .rightPanel{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;top:auto!important;order:initial!important;height:100%!important;max-height:100%!important;width:auto!important;display:flex!important;overflow:hidden!important;background:transparent!important;border-radius:0!important;z-index:auto!important}
+  body.forceDesktop .leftPanel .aircraftCard{height:100%!important;max-height:100%!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;flex:1 1 auto!important}
+  body.forceDesktop .rightPanel .selectedCard,body.forceDesktop .rightPanel .intentionsCard{height:auto!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;flex:0 0 auto!important}
+  body.forceDesktop .rightPanel .syncCard{height:auto!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;flex:0 0 auto!important;margin-top:auto!important}
+  body.forceDesktop #trafficList{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important}
+  body.forceDesktop #calls{max-height:42vh!important;overflow-y:auto!important}
+  body.forceDesktop #selectedPanel{overflow:visible!important;max-height:none!important}
+  body.forceDesktop .mobileTabBar{display:none!important}
+}
+
 </style>
 </head>
 <body>
 <header>
   <div class="headerRow topRow">
     <h1>ATC SIM</h1>
+    <button id="viewModeBtn" class="viewModeBtn" type="button">Use Full View</button>
     <button id="startBtn">Start</button><button id="pauseBtn">Pause</button><button id="newScenarioBtn">Start New</button><button id="stepBackBtn">−10 sec</button><button id="fastForwardBtn">+10 sec</button>
     <label class="control">Run speed <button class="miniBtn" id="speedMinus">−</button><span class="speedValue" id="speedValue">1.50×</span><button class="miniBtn" id="speedPlus">+</button></label>
     <span id="runtimeClock" class="runtimeClock">00:00:00</span>
@@ -466,7 +488,7 @@ function leaveSession(silent=false){
   updateSyncStatus('Local','');renderList();updateTransportButtons();
 }
 function startSession(mode,id){if(!ensureFirebase())return;leaveSession(true);syncMode=mode;syncSession=cleanSessionId(id)||makeSessionId();document.getElementById('syncSessionInput').value=syncSession;syncRef=firebaseDb.ref('atcSimSessions/'+syncSession);listenForNotices();if(mode==='instructor'){updateSyncStatus('Host '+syncSession,'live');publishState(true);publishNotice('Host joined the session.');log('Hosting session '+syncSession+'. Use Copy Share Link and send it to your trainee.')}else{updateSyncStatus('Watch '+syncSession,'watch');stateUnsub=syncRef.child('state').on('value',snap=>applyNetState(snap.val()),err=>updateSyncStatus('Sync error',''));publishNotice('Trainee joined the session.')}}
-function blockTraineeControl(e){if(syncMode!=='trainee')return;const allowed=e.target.closest&&e.target.closest('#leaveSessionBtn,#scopeWrap,#trafficList,.aircraftRow,#zoomMinus,#zoomPlus');if(!allowed){e.preventDefault();e.stopPropagation()}}
+function blockTraineeControl(e){if(syncMode!=='trainee')return;const allowed=e.target.closest&&e.target.closest('#leaveSessionBtn,#scopeWrap,#trafficList,.aircraftRow,#zoomMinus,#zoomPlus,#mobileTabBar,#viewModeBtn');if(!allowed){e.preventDefault();e.stopPropagation()}}
 document.addEventListener('click',blockTraineeControl,true);document.addEventListener('pointerdown',blockTraineeControl,true);document.addEventListener('keydown',e=>{if(syncMode==='trainee'&&!(e.target&&e.target.id==='syncSessionInput')){e.preventDefault();e.stopPropagation()}},true);
 function updateRuntimeClock(){const total=Math.max(0,Math.floor(simTime));const hh=String(Math.floor(total/3600)).padStart(2,'0'),mm=String(Math.floor((total%3600)/60)).padStart(2,'0'),ss=String(total%60).padStart(2,'0');if(runtimeClock)runtimeClock.textContent=`${hh}:${mm}:${ss}`}function snapshot(){history.push(JSON.stringify({aircraft,simTime}));if(history.length>60)history.shift()}function restore(){const s=history.pop();if(!s)return;const o=JSON.parse(s);aircraft=o.aircraft;simTime=o.simTime;renderList()}function fastForward(sec=10){snapshot();for(let r=sec;r>0;){let dt=Math.min(.2,r);simTime+=dt;updateAircraft(dt);r-=dt}updateRuntimeClock();renderList()}function newScenario(){aircraft=[];history=[];simTime=0;selectedAircraftId=null;autoGenerate=false;autoNext=6;updateAutoButton();runSpeed=1.5;document.getElementById('speedValue').textContent='1.50×';updateRuntimeClock();calls.textContent='New scenario. Add an arrival or departure.';renderList();updateTransportButtons()}
 function tick(t){const dt=Math.min(.2,(t-lastT)/1000);lastT=t;if(running&&syncMode!=='trainee'){simTime+=dt;if(Math.floor(simTime)%10===0&&Math.abs(simTime%10)<dt)snapshot();runAutoGenerate(dt);updateAircraft(dt);updateRuntimeClock();if(!labelDrag&&(t-lastListRender>250)){renderList(false);lastListRender=t}}if(syncMode==='instructor')publishState(false);draw();requestAnimationFrame(tick)}
@@ -475,6 +497,27 @@ updateRuntimeClock();updateAutoButton();updateTransportButtons();renderList();do
 window.addEventListener('beforeunload',()=>{if(syncRef&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.')});
 const urlParams=new URLSearchParams(location.search);if(urlParams.get('session')){const mode=urlParams.get('mode')==='trainee'?'trainee':'instructor';document.getElementById('syncSessionInput').value=cleanSessionId(urlParams.get('session'));setTimeout(()=>startSession(mode,document.getElementById('syncSessionInput').value),400)}
 
+
+function preferredPhoneView(){return localStorage.getItem('atcSimPhoneView')||'mobile'}
+function isPhoneLayout(){return matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 900px)').matches}
+function applyPhoneViewMode(mode){
+  const full=mode==='full';
+  document.body.classList.toggle('forceDesktop',full);
+  const btn=document.getElementById('viewModeBtn');
+  if(btn)btn.textContent=full?'Use Mobile View':'Use Full View';
+  if(full){
+    document.body.classList.remove('mobile-panel-radar','mobile-panel-aircraft','mobile-panel-selected','mobile-panel-intentions','mobile-panel-session');
+  }else if(isPhoneLayout()){
+    const active=document.querySelector('#mobileTabBar button.active');
+    setMobilePanel(active?.dataset?.panel||'radar');
+  }
+  setTimeout(()=>{updateMobileHeaderHeight();resize();draw();},80);
+}
+function togglePhoneViewMode(){
+  const next=document.body.classList.contains('forceDesktop')?'mobile':'full';
+  localStorage.setItem('atcSimPhoneView',next);
+  applyPhoneViewMode(next);
+}
 function updateMobileHeaderHeight(){
   const h=document.querySelector('header');
   if(h)document.documentElement.style.setProperty('--mobileHeader', Math.ceil(h.getBoundingClientRect().height)+'px');
@@ -487,9 +530,10 @@ function setMobilePanel(panel){
   setTimeout(()=>{resize();draw();},50);
 }
 document.querySelectorAll('#mobileTabBar button').forEach(btn=>btn.addEventListener('click',()=>setMobilePanel(btn.dataset.panel)));
+document.getElementById('viewModeBtn')?.addEventListener('click',togglePhoneViewMode);
 window.addEventListener('orientationchange',()=>setTimeout(()=>{updateMobileHeaderHeight();resize();},250));
 window.addEventListener('resize',()=>setTimeout(updateMobileHeaderHeight,50));
-setTimeout(()=>{updateMobileHeaderHeight(); if(matchMedia('(max-width: 760px)').matches)setMobilePanel('radar');},100);
+setTimeout(()=>{updateMobileHeaderHeight(); if(isPhoneLayout())applyPhoneViewMode(preferredPhoneView());},100);
 requestAnimationFrame(tick);
 </script>
 </body>
