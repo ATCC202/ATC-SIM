@@ -95,6 +95,14 @@ main {
 .syncCard .syncRow{display:grid;grid-template-columns:1fr 1fr;gap:5px}
 .syncCard .syncRow button{width:100%}
 .syncCard .syncStatus{width:100%;display:block}
+
+.voiceControls{border-top:1px solid #25334f;margin-top:4px;padding-top:6px;display:flex;flex-direction:column;gap:6px}
+.voiceControls .voiceRow{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.voiceControls button{width:100%}
+.voiceStatus{font-size:11px;color:var(--muted);border:1px solid #344462;background:#101a2d;border-radius:8px;padding:5px 8px;text-align:center}
+.voiceStatus.live{color:#9ff0b3;border-color:#52a36f}
+.voiceStatus.warn{color:#ffd166;border-color:#a98532}
+.voiceStatus.error{color:#ff9aaa;border-color:#7d3650}
 body.traineeMode header button, body.traineeMode header select, body.traineeMode header input{opacity:.48;pointer-events:none}
 body.traineeMode #zoomMinus, body.traineeMode #zoomPlus{opacity:1!important;pointer-events:auto!important}
 body.traineeMode #zoomValue{opacity:1!important}
@@ -290,10 +298,9 @@ main{height:calc(100vh - 84px)!important}
   <div class="headerRow topRow">
     <h1>ATC SIM</h1>
     <button id="viewModeBtn" class="viewModeBtn" type="button">Use Full View</button>
-    <button id="pauseBtn" class="runPauseBtn running">Pause</button><button id="newScenarioBtn">New Scenario</button><button id="stepBackBtn">−10 sec</button><button id="fastForwardBtn">+10 sec</button>
+    <button id="pauseBtn" class="runPauseBtn running">Pause</button><label>Runway <select id="runwaySelect"><option value="90">09</option><option value="270">27</option></select></label><button id="newScenarioBtn">New Scenario</button><button id="stepBackBtn">−10 sec</button><button id="fastForwardBtn">+10 sec</button>
     <label class="control">Run speed <button class="miniBtn" id="speedMinus">−</button><span class="speedValue" id="speedValue">1.50×</span><button class="miniBtn" id="speedPlus">+</button></label>
     <span id="runtimeClock" class="runtimeClock">00:00:00</span><span id="runStatus" class="statusIndicator running">Running</span>
-    <label>Runway <select id="runwaySelect"><option value="90">09</option><option value="270">27</option></select></label>
     <button id="autoGenerateBtn" type="button">Auto Off</button><label class="control scenarioControl">Scenario <select id="autoScenarioSelect" disabled><option value="normal" title="Mostly 3 NM spacing with occasional conflicts">Normal</option><option value="busy" title="Average spacing around 2 NM">Busy</option><option value="training" title="Deliberate conflicts every few minutes">Training</option><option value="instructor" title="Random mix with unusual situations">Instructor</option><option value="chaos" title="Anything can happen">Chaos</option></select></label>
   </div>
   <div class="headerRow bottomRow">
@@ -317,7 +324,7 @@ main{height:calc(100vh - 84px)!important}
 <aside id="rightPanel" class="rightPanel">
   <div class="card selectedCard"><h2>Selected aircraft</h2><div id="selectedPanel" class="small">Click an aircraft to select it. Double-click for quick actions. Drag its callsign if labels overlap.</div></div>
   <div class="card intentionsCard"><h2>Aircraft intentions</h2><div id="calls">Start a scenario, then add traffic.</div></div>
-  <div class="card syncCard"><h2>Shared session</h2><span class="syncStatus" id="syncStatus">Local</span><label class="syncSessionLabel">Session code<input id="syncSessionInput" placeholder="ABC123" maxlength="8"></label><div class="syncRow"><button id="hostSessionBtn" class="syncBtn" type="button">Host</button><button id="joinSessionBtn" class="syncBtn" type="button">Join</button></div><div class="syncRow"><button id="copyTraineeLinkBtn" class="syncBtn" type="button">Copy Share Link</button><button id="leaveSessionBtn" class="syncBtn" type="button">Leave</button></div></div>
+  <div class="card syncCard"><h2>Shared session</h2><span class="syncStatus" id="syncStatus">Local</span><label class="syncSessionLabel">Session code<input id="syncSessionInput" placeholder="ABC123" maxlength="8"></label><div class="syncRow"><button id="hostSessionBtn" class="syncBtn" type="button">Host</button><button id="joinSessionBtn" class="syncBtn" type="button">Join</button></div><div class="syncRow"><button id="copyTraineeLinkBtn" class="syncBtn" type="button">Copy Share Link</button><button id="leaveSessionBtn" class="syncBtn" type="button">Leave</button></div><div class="voiceControls" id="voiceControls"><span class="voiceStatus" id="voiceStatus">Voice: not connected</span><div class="voiceRow"><button id="startVoiceBtn" type="button">Start Voice</button><button id="muteVoiceBtn" type="button">Mute Mic</button></div><audio id="remoteVoiceAudio" autoplay playsinline></audio></div></div>
 </aside>
 <nav id="mobileTabBar" class="mobileTabBar" aria-label="Mobile panels">
   <button type="button" data-panel="radar" class="active">Radar</button>
@@ -336,6 +343,7 @@ let aircraft=[],running=true,lastT=performance.now(),simTime=0,runSpeed=1.5,zoom
 // Firebase setup: create a Firebase Realtime Database project, then replace these values with your web app config.
 const firebaseConfig={apiKey:"AIzaSyBOlGg3tf_yxmqk4MvoFhClaaSRDlqrX8A",authDomain:"atc-sim-5f63e.firebaseapp.com",databaseURL:"https://atc-sim-5f63e-default-rtdb.firebaseio.com",projectId:"atc-sim-5f63e",storageBucket:"atc-sim-5f63e.firebasestorage.app",messagingSenderId:"42428113610",appId:"1:42428113610:web:4237dacd5682706e914a33"};
 let syncMode='local',syncSession='',firebaseApp=null,firebaseDb=null,syncRef=null,stateUnsub=null,noticeUnsub=null,lastSyncWrite=0,receivingRemote=false,traineeLabelOffsets={},syncClientId='C'+Math.random().toString(36).slice(2,9),lastNoticeAt=0;
+let voicePc=null,voiceStream=null,voiceUnsubs=[],voiceConnected=false,voiceMuted=false,voiceStarted=false;
 
 const CIRCUIT_HEIGHT_FT=1500,CIRCUIT_OFFSET_NM=1.5,FINAL_LEG_NM=2,UPWIND_LEG_NM=2,RUNWAY_NM=1.875;
 const callSignPools={B350:['HDSN21','HDSN32','HDSN44','HDSN55'],Hawk:['PHNX11','PHNX24','PHNX36','PHNX48'],F18:['HRTG15','HRTG27','HRTG39','HRTG52'],PC21:['ALDN61','ALDN73','ALDN84','ALDN96'],BE79:['CLE'],C206:['WGP'],PA31:['OCF'],D328:['RSCU328'],C182:['KOJ','SVA'],BE20:['MWU'],C208:['HAM'],PA34:['KMN']};
@@ -650,9 +658,76 @@ function applyNetState(state){if(!state||receivingRemote)return;receivingRemote=
 function publishState(force=false){if(syncMode!=='instructor'||!syncRef||receivingRemote)return;const now=performance.now();if(!force&&now-lastSyncWrite<250)return;lastSyncWrite=now;syncRef.child('state').set(currentNetState()).catch(err=>updateSyncStatus('Sync error',''))}
 function publishNotice(text){if(!syncRef||!text)return;syncRef.child('notice').set({text,by:syncClientId,at:Date.now(),mode:syncMode}).catch(()=>{})}
 function listenForNotices(){if(!syncRef)return;noticeUnsub=syncRef.child('notice').on('value',snap=>{const n=snap.val();if(!n||n.by===syncClientId||!n.at||n.at<=lastNoticeAt)return;lastNoticeAt=n.at;updateSyncStatus(n.text,syncMode==='trainee'?'watch':'live');log(n.text);setTimeout(()=>{if(syncMode==='instructor')updateSyncStatus('Host '+syncSession,'live');else if(syncMode==='trainee')updateSyncStatus('Watch '+syncSession,'watch')},3500)},()=>{})}
+
+function updateVoiceStatus(text,cls=''){
+  const el=document.getElementById('voiceStatus');if(!el)return;
+  el.textContent=text;el.className='voiceStatus '+cls;
+  const btn=document.getElementById('startVoiceBtn');if(btn)btn.textContent=voiceStarted?'End Voice':(syncMode==='trainee'?'Join Voice':'Start Voice');
+  const mute=document.getElementById('muteVoiceBtn');if(mute)mute.textContent=voiceMuted?'Unmute Mic':'Mute Mic';
+}
+function clearVoiceListeners(){voiceUnsubs.forEach(fn=>{try{fn()}catch(_){}});voiceUnsubs=[]}
+function voiceConfig(){return{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}}
+function addVoiceListener(ref,event,cb){ref.on(event,cb);voiceUnsubs.push(()=>ref.off(event,cb))}
+async function stopVoice(silent=false){
+  clearVoiceListeners();
+  if(voicePc){try{voicePc.ontrack=null;voicePc.onicecandidate=null;voicePc.close()}catch(_){}}
+  voicePc=null;voiceConnected=false;voiceStarted=false;
+  if(voiceStream){voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){}})}
+  voiceStream=null;voiceMuted=false;
+  const audio=document.getElementById('remoteVoiceAudio');if(audio)audio.srcObject=null;
+  if(syncRef&&!silent){try{await syncRef.child('voice').child(syncClientId).remove()}catch(_){}}
+  updateVoiceStatus('Voice: not connected','');
+}
+async function getVoiceStream(){
+  if(voiceStream)return voiceStream;
+  voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+  voiceMuted=false;return voiceStream;
+}
+async function makeVoicePc(role){
+  const pc=new RTCPeerConnection(voiceConfig());voicePc=pc;
+  const stream=await getVoiceStream();stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+  pc.ontrack=e=>{const audio=document.getElementById('remoteVoiceAudio');if(audio){audio.srcObject=e.streams[0];audio.play().catch(()=>{})}};
+  pc.onconnectionstatechange=()=>{const s=pc.connectionState;if(s==='connected'){voiceConnected=true;updateVoiceStatus('Voice: connected','live')}else if(s==='failed'||s==='disconnected'){voiceConnected=false;updateVoiceStatus('Voice: '+s,'error')}else if(voiceStarted){updateVoiceStatus('Voice: '+s,'warn')}};
+  const candPath=role==='instructor'?'hostCandidates':'traineeCandidates';
+  pc.onicecandidate=e=>{if(e.candidate&&syncRef)syncRef.child('voice').child(candPath).push(e.candidate.toJSON()).catch(()=>{})};
+  return pc;
+}
+async function startVoiceConnection(){
+  if(voiceStarted){await stopVoice();return}
+  if(!syncRef||syncMode==='local'){alert('Start or join a shared session first.');return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('This browser does not support microphone access for WebRTC.');return}
+  voiceStarted=true;updateVoiceStatus('Voice: requesting microphone','warn');
+  try{
+    if(syncMode==='instructor')await startHostVoice();else await startTraineeVoice();
+  }catch(err){console.error(err);await stopVoice(true);updateVoiceStatus('Voice error: '+(err&&err.message?err.message:'could not connect'),'error')}
+}
+async function startHostVoice(){
+  const voiceRef=syncRef.child('voice');
+  await voiceRef.remove();
+  const pc=await makeVoicePc('instructor');
+  addVoiceListener(voiceRef.child('answer'),'value',async snap=>{const answer=snap.val();if(answer&&pc.signalingState!=='stable'){try{await pc.setRemoteDescription(new RTCSessionDescription(answer))}catch(e){console.warn(e)}}});
+  addVoiceListener(voiceRef.child('traineeCandidates'),'child_added',async snap=>{const c=snap.val();if(c)try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn(e)}});
+  const offer=await pc.createOffer({offerToReceiveAudio:true});await pc.setLocalDescription(offer);await voiceRef.child('offer').set({type:offer.type,sdp:offer.sdp,by:syncClientId,at:Date.now()});
+  updateVoiceStatus('Voice: waiting for trainee','warn');
+}
+async function startTraineeVoice(){
+  const voiceRef=syncRef.child('voice');
+  const offerSnap=await voiceRef.child('offer').get();const offer=offerSnap.val();
+  if(!offer){throw new Error('host has not started voice')}
+  const pc=await makeVoicePc('trainee');
+  addVoiceListener(voiceRef.child('hostCandidates'),'child_added',async snap=>{const c=snap.val();if(c)try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn(e)}});
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await voiceRef.child('answer').set({type:answer.type,sdp:answer.sdp,by:syncClientId,at:Date.now()});
+  updateVoiceStatus('Voice: connecting','warn');
+}
+function toggleVoiceMute(){
+  if(!voiceStream){updateVoiceStatus('Voice: not connected','');return}
+  voiceMuted=!voiceMuted;voiceStream.getAudioTracks().forEach(t=>t.enabled=!voiceMuted);updateVoiceStatus(voiceMuted?'Voice: mic muted':(voiceConnected?'Voice: connected':'Voice: connecting'),voiceMuted?'warn':(voiceConnected?'live':'warn'));
+}
 function traineeLink(){const id=cleanSessionId(document.getElementById('syncSessionInput').value)||syncSession||makeSessionId();document.getElementById('syncSessionInput').value=id;const url=new URL(location.href);url.searchParams.set('mode','trainee');url.searchParams.set('session',id);return url.toString()}
 async function copyTraineeLink(){const link=traineeLink();try{await navigator.clipboard.writeText(link);alert('Share link copied. Send this to your friend:\n\n'+link)}catch(_){prompt('Copy this share link:',link)}}
 function leaveSession(silent=false){
+  stopVoice(true);
   if(syncRef&&!silent&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.');
   if(stateUnsub&&syncRef){syncRef.child('state').off('value',stateUnsub);stateUnsub=null}
   if(noticeUnsub&&syncRef){syncRef.child('notice').off('value',noticeUnsub);noticeUnsub=null}
@@ -661,7 +736,7 @@ function leaveSession(silent=false){
   updateSyncStatus('Local','');renderList();updateTransportButtons();
 }
 function startSession(mode,id){if(!ensureFirebase())return;leaveSession(true);syncMode=mode;syncSession=cleanSessionId(id)||makeSessionId();document.getElementById('syncSessionInput').value=syncSession;syncRef=firebaseDb.ref('atcSimSessions/'+syncSession);listenForNotices();if(mode==='instructor'){updateSyncStatus('Host '+syncSession,'live');publishState(true);publishNotice('Host joined the session.');log('Hosting session '+syncSession+'. Use Copy Share Link and send it to your trainee.')}else{updateSyncStatus('Watch '+syncSession,'watch');stateUnsub=syncRef.child('state').on('value',snap=>applyNetState(snap.val()),err=>updateSyncStatus('Sync error',''));publishNotice('Trainee joined the session.')}}
-function blockTraineeControl(e){if(syncMode!=='trainee')return;const allowed=e.target.closest&&e.target.closest('#leaveSessionBtn,#scopeWrap,#trafficList,.aircraftRow,#zoomMinus,#zoomPlus,#mobileTabBar,#viewModeBtn');if(!allowed){e.preventDefault();e.stopPropagation()}}
+function blockTraineeControl(e){if(syncMode!=='trainee')return;const allowed=e.target.closest&&e.target.closest('#leaveSessionBtn,#startVoiceBtn,#muteVoiceBtn,#voiceControls,#scopeWrap,#trafficList,.aircraftRow,#zoomMinus,#zoomPlus,#mobileTabBar,#viewModeBtn');if(!allowed){e.preventDefault();e.stopPropagation()}}
 document.addEventListener('click',blockTraineeControl,true);document.addEventListener('pointerdown',blockTraineeControl,true);document.addEventListener('keydown',e=>{if(syncMode==='trainee'&&!(e.target&&e.target.id==='syncSessionInput')){e.preventDefault();e.stopPropagation()}},true);
 
 function updateAutoSettings(){
@@ -672,9 +747,9 @@ function updateAutoSettings(){
 }
 function updateRuntimeClock(){const total=Math.max(0,Math.floor(simTime));const hh=String(Math.floor(total/3600)).padStart(2,'0'),mm=String(Math.floor((total%3600)/60)).padStart(2,'0'),ss=String(total%60).padStart(2,'0');if(runtimeClock)runtimeClock.textContent=`${hh}:${mm}:${ss}`}function snapshot(){history.push(JSON.stringify({aircraft,simTime}));if(history.length>60)history.shift()}function restore(){if(running)return;const s=history.pop();if(!s)return;const o=JSON.parse(s);aircraft=o.aircraft;simTime=o.simTime;renderList();updateTransportButtons()}function fastForward(sec=10){if(running)return;snapshot();for(let r=sec;r>0;){let dt=Math.min(.2,r);simTime+=dt;updateAircraft(dt);r-=dt}updateRuntimeClock();renderList();updateTransportButtons()}function newScenario(){aircraft=[];history=[];simTime=0;selectedAircraftId=null;autoGenerate=false;autoNext=6;autoScenario="normal";cnthActive=false;running=true;updateAutoButton();updateCnthButton();runSpeed=1.5;document.getElementById('speedValue').textContent='1.50×';updateRuntimeClock();calls.textContent='New scenario. Add an arrival or departure.';renderList();updateTransportButtons();if(syncMode==='instructor')publishState(true)}
 function tick(t){const dt=Math.min(.2,(t-lastT)/1000);lastT=t;if(running&&syncMode!=='trainee'){simTime+=dt;if(Math.floor(simTime)%10===0&&Math.abs(simTime%10)<dt)snapshot();runAutoGenerate(dt);if(cnthActive&&!aircraft.some(a=>a.mode==='choppers-north'))spawnChoppersNorth();updateAircraft(dt);updateRuntimeClock();if(!labelDrag&&(t-lastListRender>250)){renderList(false);lastListRender=t}}if(syncMode==='instructor')publishState(false);draw();requestAnimationFrame(tick)}
-document.getElementById('pauseBtn').onclick=()=>{if(syncMode==='trainee')return;running=!running;updateTransportButtons();if(syncMode==='instructor')publishState(true)};document.getElementById('newScenarioBtn').onclick=newScenario;document.getElementById('stepBackBtn').onclick=restore;document.getElementById('fastForwardBtn').onclick=()=>fastForward(10);document.getElementById('randomArrivalBtn').onclick=spawnRandomArrival;document.getElementById('spawnDepartureBtn').onclick=spawnRandomDeparture;document.getElementById('autoGenerateBtn').onclick=toggleAutoGenerate;document.getElementById('cnthBtn').onclick=toggleChoppersNorth;document.getElementById('autoScenarioSelect').onchange=updateAutoSettings;document.getElementById('depHeadingBtn').onclick=spawnDepartureAssignedHeading;document.getElementById('arrivalRadialBtn').onclick=spawnSelectedArrivalOnRadial;document.getElementById('speedMinus').onclick=()=>{runSpeed=Math.max(.25,+(runSpeed-.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('speedPlus').onclick=()=>{runSpeed=Math.min(6,+(runSpeed+.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('zoomMinus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.max(.60,+(zoomLevel-.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale())};document.getElementById('zoomPlus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.min(2.2,+(zoomLevel+.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale())};document.getElementById('runwaySelect').onchange=()=>{document.getElementById('arrivalRadialInput').value=String(rwyHdg()).padStart(3,'0');aircraft.forEach(ac=>{if(ac.mode==='arrival-inbound')ac.side=sideFromPosition(ac.pos)});renderList();renderSelectedPanel()};document.getElementById('hostSessionBtn').onclick=()=>startSession('instructor',document.getElementById('syncSessionInput').value);document.getElementById('joinSessionBtn').onclick=()=>startSession('trainee',document.getElementById('syncSessionInput').value);document.getElementById('copyTraineeLinkBtn').onclick=copyTraineeLink;document.getElementById('leaveSessionBtn').onclick=leaveSession;
-updateRuntimeClock();updateAutoButton();updateCnthButton();updateTransportButtons();renderList();document.addEventListener('dragstart', e=>e.preventDefault());
-window.addEventListener('beforeunload',()=>{if(syncRef&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.')});
+document.getElementById('pauseBtn').onclick=()=>{if(syncMode==='trainee')return;running=!running;updateTransportButtons();if(syncMode==='instructor')publishState(true)};document.getElementById('newScenarioBtn').onclick=newScenario;document.getElementById('stepBackBtn').onclick=restore;document.getElementById('fastForwardBtn').onclick=()=>fastForward(10);document.getElementById('randomArrivalBtn').onclick=spawnRandomArrival;document.getElementById('spawnDepartureBtn').onclick=spawnRandomDeparture;document.getElementById('autoGenerateBtn').onclick=toggleAutoGenerate;document.getElementById('cnthBtn').onclick=toggleChoppersNorth;document.getElementById('autoScenarioSelect').onchange=updateAutoSettings;document.getElementById('depHeadingBtn').onclick=spawnDepartureAssignedHeading;document.getElementById('arrivalRadialBtn').onclick=spawnSelectedArrivalOnRadial;document.getElementById('speedMinus').onclick=()=>{runSpeed=Math.max(.25,+(runSpeed-.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('speedPlus').onclick=()=>{runSpeed=Math.min(6,+(runSpeed+.25).toFixed(2));document.getElementById('speedValue').textContent=runSpeed.toFixed(2)+'×'};document.getElementById('zoomMinus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.max(.60,+(zoomLevel-.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale())};document.getElementById('zoomPlus').onclick=()=>{const oldC=centre(),oldS=scale();zoomLevel=Math.min(2.2,+(zoomLevel+.1).toFixed(2));rescaleAircraftGeometry(oldC,oldS,centre(),scale())};document.getElementById('runwaySelect').onchange=()=>{document.getElementById('arrivalRadialInput').value=String(rwyHdg()).padStart(3,'0');aircraft.forEach(ac=>{if(ac.mode==='arrival-inbound')ac.side=sideFromPosition(ac.pos)});renderList();renderSelectedPanel()};document.getElementById('hostSessionBtn').onclick=()=>startSession('instructor',document.getElementById('syncSessionInput').value);document.getElementById('joinSessionBtn').onclick=()=>startSession('trainee',document.getElementById('syncSessionInput').value);document.getElementById('copyTraineeLinkBtn').onclick=copyTraineeLink;document.getElementById('leaveSessionBtn').onclick=leaveSession;document.getElementById('startVoiceBtn').onclick=startVoiceConnection;document.getElementById('muteVoiceBtn').onclick=toggleVoiceMute;
+updateRuntimeClock();updateAutoButton();updateCnthButton();updateTransportButtons();updateVoiceStatus('Voice: not connected','');renderList();document.addEventListener('dragstart', e=>e.preventDefault());
+window.addEventListener('beforeunload',()=>{stopVoice(true);if(syncRef&&syncMode!=='local')publishNotice((syncMode==='instructor'?'Host':'Trainee')+' left the session.')});
 const urlParams=new URLSearchParams(location.search);if(urlParams.get('session')){const mode=urlParams.get('mode')==='trainee'?'trainee':'instructor';document.getElementById('syncSessionInput').value=cleanSessionId(urlParams.get('session'));setTimeout(()=>startSession(mode,document.getElementById('syncSessionInput').value),400)}
 
 
